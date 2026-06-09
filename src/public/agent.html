@@ -88,12 +88,18 @@
       border-color: var(--primary);
     }
     
+    .tool-calls {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    
     .tool-call {
       background: var(--code-bg);
       border: 1px solid var(--border);
       border-radius: 6px;
       padding: 10px;
-      margin-top: 8px;
       font-family: ui-monospace, monospace;
       font-size: 12px;
     }
@@ -287,7 +293,7 @@
       setTimeout(() => t.classList.add('hidden'), 2400);
     }
 
-    function addMessage(role, content, toolCall = null) {
+    function addMessage(role, content, toolCalls = []) {
       const container = $('chat-messages');
       $('empty-state')?.classList.add('hidden');
       
@@ -305,26 +311,41 @@
       messageEl.appendChild(avatar);
       messageEl.appendChild(contentEl);
       
-      if (toolCall) {
-        const toolEl = document.createElement('div');
-        toolEl.className = 'tool-call';
+      if (toolCalls && toolCalls.length > 0) {
+        const toolsContainer = document.createElement('div');
+        toolsContainer.className = 'tool-calls';
         
-        const toolName = document.createElement('div');
-        toolName.innerHTML = `<span class="tool-name">${toolCall.name}</span>(${JSON.stringify(toolCall.args)})`;
-        toolEl.appendChild(toolName);
-        
-        const resultEl = document.createElement('div');
-        resultEl.className = 'tool-result';
-        if (toolCall.result.success) {
-          resultEl.innerHTML = `<span class="success">✓ 成功</span>`;
-          if (toolCall.result.data) {
-            resultEl.innerHTML += `<br/>${JSON.stringify(toolCall.result.data, null, 2).substring(0, 500)}${JSON.stringify(toolCall.result.data).length > 500 ? '...' : ''}`;
+        toolCalls.forEach((toolCall, index) => {
+          const toolEl = document.createElement('div');
+          toolEl.className = 'tool-call';
+          
+          const toolName = document.createElement('div');
+          toolName.innerHTML = `<span style="color: var(--muted); font-size: 11px;">[工具调用 ${index + 1}]</span> <span class="tool-name">${toolCall.name}</span>`;
+          toolEl.appendChild(toolName);
+          
+          const toolArgs = document.createElement('div');
+          toolArgs.style.marginTop = '4px';
+          toolArgs.style.fontSize = '11px';
+          toolArgs.style.color = 'var(--muted)';
+          toolArgs.textContent = `参数: ${JSON.stringify(toolCall.args)}`;
+          toolEl.appendChild(toolArgs);
+          
+          const resultEl = document.createElement('div');
+          resultEl.className = 'tool-result';
+          if (toolCall.result.success) {
+            resultEl.innerHTML = `<span class="success">✓ 成功</span>`;
+            if (toolCall.result.data) {
+              const dataStr = JSON.stringify(toolCall.result.data, null, 2);
+              resultEl.innerHTML += `<br/><pre style="margin-top: 4px; padding: 8px; background: rgba(0,0,0,0.1); border-radius: 4px; font-size: 11px; max-height: 150px; overflow-y: auto;">${dataStr.substring(0, 800)}${dataStr.length > 800 ? '...' : ''}</pre>`;
+            }
+          } else {
+            resultEl.innerHTML = `<span class="error">✗ 失败</span>: ${toolCall.result.message}`;
           }
-        } else {
-          resultEl.innerHTML = `<span class="error">✗ 失败</span>: ${toolCall.result.message}`;
-        }
-        toolEl.appendChild(resultEl);
-        messageEl.appendChild(toolEl);
+          toolEl.appendChild(resultEl);
+          toolsContainer.appendChild(toolEl);
+        });
+        
+        messageEl.appendChild(toolsContainer);
       }
       
       container.appendChild(messageEl);
@@ -357,9 +378,9 @@
         container.removeChild(typingEl);
         
         if (res.ok && res.data) {
-          const { content, toolCall } = res.data;
+          const { content, toolCalls = [] } = res.data;
           messages.push({ role: 'assistant', content });
-          addMessage('assistant', content, toolCall);
+          addMessage('assistant', content, toolCalls);
         } else {
           toast(res.message || '请求失败', 'err');
           messages.pop();

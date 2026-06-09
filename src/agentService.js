@@ -198,6 +198,8 @@ async function callLLM(messages) {
 }
 
 async function chat(messages) {
+  const MAX_ITERATIONS = 5;
+  
   const systemPrompt = {
     role: 'system',
     content: `你是一个API接口管理助手，帮助用户管理测试用的Mock接口。
@@ -232,39 +234,53 @@ async function chat(messages) {
 - 回复时要用中文，保持友好自然`
   };
 
-  const allMessages = [systemPrompt, ...messages];
-  const response = await callLLM(allMessages);
+  let allMessages = [systemPrompt, ...messages];
+  const toolCalls = [];
   
-  const choice = response.choices?.[0];
-  if (!choice) throw new Error('LLM响应格式错误');
+  for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
+    const response = await callLLM(allMessages);
+    const choice = response.choices?.[0];
+    if (!choice) throw new Error('LLM响应格式错误');
 
-  const message = choice.message;
-  
-  if (message.tool_calls && message.tool_calls.length > 0) {
-    const toolCall = message.tool_calls[0];
-    const toolResult = await callTool(toolCall.function.name, JSON.parse(toolCall.function.arguments));
+    const message = choice.message;
     
-    const toolMessage = {
-      role: 'tool',
-      content: JSON.stringify(toolResult),
-      tool_call_id: toolCall.id
-    };
-    
-    const finalResponse = await callLLM([...allMessages, message, toolMessage]);
-    const finalChoice = finalResponse.choices?.[0];
-    
-    return {
-      type: 'text',
-      content: finalChoice?.message?.content || '操作完成',
-      toolCall: {
-        name: toolCall.function.name,
-        args: JSON.parse(toolCall.function.arguments),
-        result: toolResult
+    if (message.tool_calls && message.tool_calls.length > 0) {
+      for (const toolCall of message.tool_calls) {
+        const args = JSON.parse(toolCall.function.arguments);
+        const toolResult = await callTool(toolCall.function.name, args);
+        
+        toolCalls.push({
+          name: toolCall.function.name,
+          args,
+          result: toolResult
+        });
+        
+        const toolMessage = {
+          role: 'tool',
+          content: JSON.stringify(toolResult),
+          tool_call_id: toolCall.id
+        };
+        
+        allMessages.push(message);
+        allMessages.push(toolMessage);
       }
-    };
+    } else {
+      return {
+        type: 'text',
+        content: message.content || '操作完成',
+        toolCalls
+      };
+    }
   }
-
-  return { type: 'text', content: message.content };
+  
+  const finalResponse = await callLLM(allMessages);
+  const finalChoice = finalResponse.choices?.[0];
+  
+  return {
+    type: 'text',
+    content: finalChoice?.message?.content || '操作完成',
+    toolCalls
+  };
 }
 
 function getConfig() {
