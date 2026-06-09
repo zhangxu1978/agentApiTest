@@ -1,0 +1,20 @@
+{
+  "name": "agent-api-test",
+  "version": "1.0.0",
+  "description": "本地 API Mock 测试工具：可配置 HTTP 方法、请求头、入参、返回数据，按规则校验请求并返回预设响应或错误。",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

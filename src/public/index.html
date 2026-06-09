@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>API Mock 测试工具</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <span class="logo">⚡</span>
+        <span class="title">API Mock 测试工具</span>
+      </div>
+      <div class="topbar-actions">
+        <input id="search" type="text" placeholder="搜索接口名称或路径..." />
+        <button id="btn-new" class="btn btn-primary">+ 新建接口</button>
+        <button id="btn-refresh" class="btn">刷新</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <span>接口列表</span>
+        <span id="list-count" class="muted">0</span>
+      </div>
+      <ul id="api-list" class="api-list"></ul>
+    </aside>
+
+    <section class="content">
+      <div id="empty" class="empty">
+        <p>从左侧选择接口进行编辑，或点击右上角"<b>新建接口</b>"开始。</p>
+      </div>
+
+      <div id="editor" class="editor hidden">
+        <div class="editor-header">
+          <div>
+            <h2 id="editor-title">编辑接口</h2>
+            <span id="editor-subtitle" class="muted"></span>
+          </div>
+          <div class="editor-actions">
+            <button id="btn-test" class="btn">测试调用</button>
+            <button id="btn-save" class="btn btn-primary">保存</button>
+            <button id="btn-delete" class="btn btn-danger">删除</button>
+            <button id="btn-cancel" class="btn">取消</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">基本信息</div>
+          <div class="grid-2">
+            <label>
+              <span>接口名称 *</span>
+              <input id="f-name" type="text" placeholder="例如：用户登录" />
+            </label>
+            <label>
+              <span>HTTP 方法 *</span>
+              <select id="f-method">
+                <option>GET</option>
+                <option>POST</option>
+                <option>PUT</option>
+                <option>DELETE</option>
+                <option>PATCH</option>
+              </select>
+            </label>
+            <label class="col-span-2">
+              <span>访问路径 *</span>
+              <input id="f-path" type="text" placeholder="/api/auth/login" />
+              <small class="muted">支持自定义前缀，如 /api/xxx、/mock/xxx、/v1/xxx</small>
+            </label>
+            <label>
+              <span>内容类型</span>
+              <input id="f-content-type" type="text" value="application/json; charset=utf-8" />
+            </label>
+            <label>
+              <span>响应状态码</span>
+              <input id="f-response-status" type="number" min="100" max="599" value="200" />
+            </label>
+            <label class="col-span-2">
+              <span>备注</span>
+              <input id="f-description" type="text" placeholder="可选" />
+            </label>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">
+            <span>请求头校验</span>
+            <button class="btn btn-mini" id="btn-add-header">+ 添加</button>
+          </div>
+          <table class="data-table" id="header-table">
+            <thead>
+              <tr>
+                <th style="width:40%">Header 名 *</th>
+                <th style="width:15%">必填</th>
+                <th style="width:35%">正则</th>
+                <th style="width:10%"></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">
+            <span>入参定义 (支持嵌套：object / array)</span>
+            <button class="btn btn-mini" id="btn-add-param">+ 添加根级参数</button>
+          </div>
+          <table class="data-table param-table" id="param-table">
+            <thead>
+              <tr>
+                <th style="width:18%">名称 *</th>
+                <th style="width:9%">位置 *</th>
+                <th style="width:9%">类型 *</th>
+                <th style="width:6%">必填</th>
+                <th style="width:7%">最小长度</th>
+                <th style="width:7%">最大长度</th>
+                <th style="width:7%">最小值</th>
+                <th style="width:7%">最大值</th>
+                <th style="width:9%">正则</th>
+                <th style="width:9%">备注</th>
+                <th style="width:12%"></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+          <small class="muted">提示：类型为 <code>object</code> 或 <code>array</code> 的参数可点击「+子项」添加嵌套结构。array 的子项描述数组中每个元素的结构。</small>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">返回数据 (response_body) *</div>
+          <textarea id="f-response-body" class="code-area" rows="8" spellcheck="false"></textarea>
+          <small id="f-response-body-status" class="muted"></small>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">错误格式 (error_format) *</div>
+          <textarea id="f-error-format" class="code-area" rows="4" spellcheck="false"></textarea>
+          <small class="muted">占位符：<code>{{code}}</code> <code>{{message}}</code> <code>{{field}}</code></small>
+          <small id="f-error-format-status" class="muted"></small>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Test dialog -->
+  <div id="test-modal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <span id="test-title">测试调用</span>
+        <button id="btn-close-test" class="btn-mini">✕</button>
+      </div>
+      <div class="modal-body">
+        <label>
+          <span>Query 参数 (JSON)</span>
+          <textarea id="t-query" class="code-area" rows="3" spellcheck="false">{}</textarea>
+        </label>
+        <label>
+          <span>Body (JSON, 非 GET 请求可用)</span>
+          <textarea id="t-body" class="code-area" rows="5" spellcheck="false">{}</textarea>
+        </label>
+        <label>
+          <span>自定义请求头 (JSON)</span>
+          <textarea id="t-headers" class="code-area" rows="3" spellcheck="false">{}</textarea>
+        </label>
+        <div class="row-end">
+          <button id="btn-do-test" class="btn btn-primary">发起调用</button>
+        </div>
+        <div id="test-result" class="test-result hidden">
+          <div><b>URL:</b> <code id="t-url"></code></div>
+          <div><b>Method:</b> <code id="t-method"></code></div>
+          <div><b>Status:</b> <code id="t-status"></code></div>
+          <div><b>Response Headers:</b>
+            <pre id="t-resp-headers" class="code-pre"></pre>
+          </div>
+          <div><b>Response Body:</b>
+            <pre id="t-resp-body" class="code-pre"></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
