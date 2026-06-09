@@ -4,10 +4,14 @@ const express = require('express');
 const service = require('../configService');
 const { validateRequest } = require('../validator');
 const { sendSuccess, sendError, sendRawError } = require('../response');
+const logger = require('../logger');
 
 const router = express.Router();
 
 router.all('*', (req, res) => {
+  if (req.path !== '/health') {
+    logger.addLog(req);
+  }
   const config = service.getConfigByPath(req.method, req.path);
   if (!config) {
     return sendRawError(res, 404, { code: 'NOT_FOUND', message: `API ${req.method} ${req.path} 不存在` });

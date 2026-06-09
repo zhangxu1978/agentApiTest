@@ -18,6 +18,39 @@
   --code-bg: #0b1220;
 }
 
+.hidden {
+  display: none !important;
+}
+
+.sidebar-right {
+  width: 400px;
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.log-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.log-detail-grid code {
+  background: var(--code-bg);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.logs-list .data-table td {
+  cursor: pointer;
+}
+.logs-list .data-table tr:hover {
+  background: var(--panel-2);
+}
+
 * { box-sizing: border-box; }
 
 html, body {

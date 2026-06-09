@@ -5,6 +5,7 @@ const express = require('express');
 
 require('./src/db'); // init DB
 const adminRouter = require('./src/routes/admin');
+const agentRouter = require('./src/routes/agent');
 const mockRouter = require('./src/routes/mock');
 
 const app = express();
@@ -18,6 +19,9 @@ app.use(express.static(path.join(__dirname, 'src', 'public')));
 
 // Admin REST API
 app.use('/admin/api', adminRouter);
+
+// Agent API
+app.use('/agent', agentRouter);
 
 // Catch-all mock dispatcher (must be last)
 app.use(mockRouter);

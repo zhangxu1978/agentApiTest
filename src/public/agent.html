@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Agent 接口助手</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .chat-container {
+      display: flex;
+      flex-direction: column;
+      height: calc(100vh - 60px);
+      background: var(--bg);
+    }
+    
+    .chat-header {
+      padding: 12px 16px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .chat-header h1 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 600;
+    }
+    
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    
+    .message {
+      max-width: 80%;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    
+    .message.user {
+      align-self: flex-end;
+    }
+    
+    .message.assistant {
+      align-self: flex-start;
+    }
+    
+    .message-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+    
+    .message.user .message-avatar {
+      background: var(--primary);
+      color: white;
+    }
+    
+    .message.assistant .message-avatar {
+      background: var(--success);
+      color: white;
+    }
+    
+    .message-content {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    
+    .message.user .message-content {
+      background: var(--primary);
+      border-color: var(--primary);
+    }
+    
+    .tool-call {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px;
+      margin-top: 8px;
+      font-family: ui-monospace, monospace;
+      font-size: 12px;
+    }
+    
+    .tool-call .tool-name {
+      color: var(--primary);
+      font-weight: 600;
+    }
+    
+    .tool-call .tool-result {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border);
+    }
+    
+    .tool-call .success { color: var(--success); }
+    .tool-call .error { color: var(--danger); }
+    
+    .chat-input {
+      padding: 12px 16px;
+      background: var(--panel);
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 10px;
+    }
+    
+    .chat-input textarea {
+      flex: 1;
+      min-height: 44px;
+      max-height: 120px;
+      resize: none;
+      padding: 10px 14px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 14px;
+      outline: none;
+    }
+    
+    .chat-input textarea:focus {
+      border-color: var(--primary);
+    }
+    
+    .chat-input button {
+      padding: 10px 20px;
+      align-self: flex-end;
+    }
+    
+    .typing-indicator {
+      display: flex;
+      gap: 4px;
+      padding: 8px 12px;
+    }
+    
+    .typing-indicator span {
+      width: 6px;
+      height: 6px;
+      background: var(--muted);
+      border-radius: 50%;
+      animation: typing 1.4s infinite ease-in-out;
+    }
+    
+    .typing-indicator span:nth-child(1) { animation-delay: 0s; }
+    .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+    .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+    
+    @keyframes typing {
+      0%, 80%, 100% { transform: scale(0.6); opacity: 0.5; }
+      40% { transform: scale(1); opacity: 1; }
+    }
+    
+    .nav-links {
+      display: flex;
+      gap: 8px;
+    }
+    
+    .nav-links a {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 13px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      transition: all 0.15s;
+    }
+    
+    .nav-links a:hover {
+      color: var(--text);
+      background: var(--panel-2);
+    }
+    
+    .nav-links a.active {
+      color: var(--primary);
+    }
+    
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      color: var(--muted);
+      text-align: center;
+    }
+    
+    .empty-state h3 {
+      margin: 0 0 8px 0;
+      color: var(--text);
+    }
+    
+    .empty-state p {
+      margin: 0;
+      font-size: 13px;
+    }
+    
+    .config-status {
+      font-size: 12px;
+      padding: 4px 8px;
+      border-radius: 4px;
+    }
+    
+    .config-status.ok {
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--success);
+    }
+    
+    .config-status.error {
+      background: rgba(239, 68, 68, 0.15);
+      color: var(--danger);
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <span class="logo">🤖</span>
+        <span class="title">Agent 接口助手</span>
+      </div>
+      <div class="nav-links">
+        <a href="/">接口管理</a>
+        <a href="/agent.html" class="active">AI 助手</a>
+      </div>
+    </div>
+  </header>
+
+  <div class="chat-container">
+    <div class="chat-header">
+      <div>
+        <h1>与 Agent 对话</h1>
+        <span id="config-status" class="config-status error">未配置 API Key</span>
+      </div>
+      <button id="btn-reload-config" class="btn btn-mini">刷新配置</button>
+    </div>
+
+    <div class="chat-messages" id="chat-messages">
+      <div class="empty-state" id="empty-state">
+        <h3>欢迎使用 Agent 接口助手</h3>
+        <p>用自然语言描述您想要创建或管理的接口，我来帮您完成！</p>
+        <p style="margin-top: 8px; font-size: 12px;">例如："创建一个用户登录接口"、"列出所有接口"、"删除ID为1的接口"</p>
+      </div>
+    </div>
+
+    <div class="chat-input">
+      <textarea id="input-message" placeholder="输入您的请求，例如：创建一个获取用户列表的GET接口"></textarea>
+      <button id="btn-send" class="btn btn-primary">发送</button>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script>
+    const API = {
+      chat: (messages) => fetch('/agent/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages })
+      }).then(r => r.json()),
+      getConfig: () => fetch('/agent/config').then(r => r.json()),
+      reloadConfig: () => fetch('/agent/config/reload', { method: 'POST' }).then(r => r.json())
+    };
+
+    const $ = id => document.getElementById(id);
+
+    let messages = [];
+
+    function toast(msg, type = 'ok') {
+      const t = $('toast');
+      t.textContent = msg;
+      t.className = 'toast ' + type;
+      setTimeout(() => t.classList.add('hidden'), 2400);
+    }
+
+    function addMessage(role, content, toolCall = null) {
+      const container = $('chat-messages');
+      $('empty-state')?.classList.add('hidden');
+      
+      const messageEl = document.createElement('div');
+      messageEl.className = `message ${role}`;
+      
+      const avatar = document.createElement('div');
+      avatar.className = 'message-avatar';
+      avatar.textContent = role === 'user' ? '👤' : '🤖';
+      
+      const contentEl = document.createElement('div');
+      contentEl.className = 'message-content';
+      contentEl.textContent = content;
+      
+      messageEl.appendChild(avatar);
+      messageEl.appendChild(contentEl);
+      
+      if (toolCall) {
+        const toolEl = document.createElement('div');
+        toolEl.className = 'tool-call';
+        
+        const toolName = document.createElement('div');
+        toolName.innerHTML = `<span class="tool-name">${toolCall.name}</span>(${JSON.stringify(toolCall.args)})`;
+        toolEl.appendChild(toolName);
+        
+        const resultEl = document.createElement('div');
+        resultEl.className = 'tool-result';
+        if (toolCall.result.success) {
+          resultEl.innerHTML = `<span class="success">✓ 成功</span>`;
+          if (toolCall.result.data) {
+            resultEl.innerHTML += `<br/>${JSON.stringify(toolCall.result.data, null, 2).substring(0, 500)}${JSON.stringify(toolCall.result.data).length > 500 ? '...' : ''}`;
+          }
+        } else {
+          resultEl.innerHTML = `<span class="error">✗ 失败</span>: ${toolCall.result.message}`;
+        }
+        toolEl.appendChild(resultEl);
+        messageEl.appendChild(toolEl);
+      }
+      
+      container.appendChild(messageEl);
+      container.scrollTop = container.scrollHeight;
+      
+      return messageEl;
+    }
+
+    async function sendMessage() {
+      const input = $('input-message');
+      const text = input.value.trim();
+      
+      if (!text) return;
+      
+      input.value = '';
+      
+      addMessage('user', text);
+      
+      const container = $('chat-messages');
+      const typingEl = document.createElement('div');
+      typingEl.className = 'message assistant';
+      typingEl.innerHTML = '<div class="message-avatar">🤖</div><div class="message-content"><div class="typing-indicator"><span></span><span></span><span></span></div></div>';
+      container.appendChild(typingEl);
+      container.scrollTop = container.scrollHeight;
+      
+      try {
+        messages.push({ role: 'user', content: text });
+        const res = await API.chat(messages);
+        
+        container.removeChild(typingEl);
+        
+        if (res.ok && res.data) {
+          const { content, toolCall } = res.data;
+          messages.push({ role: 'assistant', content });
+          addMessage('assistant', content, toolCall);
+        } else {
+          toast(res.message || '请求失败', 'err');
+          messages.pop();
+        }
+      } catch (e) {
+        container.removeChild(typingEl);
+        toast('请求失败: ' + e.message, 'err');
+        messages.pop();
+      }
+    }
+
+    async function checkConfig() {
+      const res = await API.getConfig();
+      const status = $('config-status');
+      
+      if (res.ok && res.data?.agent?.apiKey) {
+        status.textContent = '✓ 已配置';
+        status.className = 'config-status ok';
+      } else {
+        status.textContent = '未配置 API Key';
+        status.className = 'config-status error';
+      }
+    }
+
+    async function reloadConfig() {
+      const res = await API.reloadConfig();
+      if (res.ok) {
+        toast('配置已刷新');
+        checkConfig();
+      } else {
+        toast('刷新失败: ' + res.message, 'err');
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      $('input-message').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          sendMessage();
+        }
+      });
+      
+      $('btn-send').addEventListener('click', sendMessage);
+      $('btn-reload-config').addEventListener('click', reloadConfig);
+      
+      checkConfig();
+    });
+  </script>
+</body>
+</html>

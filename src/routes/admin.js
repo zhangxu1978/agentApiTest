@@ -2,8 +2,18 @@
 
 const express = require('express');
 const service = require('../configService');
+const logger = require('../logger');
 
 const router = express.Router();
+
+router.get('/logs', (req, res) => {
+  res.json({ ok: true, data: logger.getLogs() });
+});
+
+router.delete('/logs', (req, res) => {
+  logger.clearLogs();
+  res.json({ ok: true });
+});
 
 router.get('/configs', (req, res) => {
   res.json({ ok: true, data: service.listConfigs() });

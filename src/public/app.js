@@ -5,7 +5,9 @@ const API = {
   get:    (id) => fetch(`/admin/api/configs/${id}`).then((r) => r.json()),
   create: (data) => fetch('/admin/api/configs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).then((r) => r.json()),
   update: (id, data) => fetch(`/admin/api/configs/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).then((r) => r.json()),
-  remove: (id) => fetch(`/admin/api/configs/${id}`, { method: 'DELETE' }).then((r) => r.json())
+  remove: (id) => fetch(`/admin/api/configs/${id}`, { method: 'DELETE' }).then((r) => r.json()),
+  logs:   () => fetch('/admin/api/logs').then((r) => r.json()),
+  clearLogs: () => fetch('/admin/api/logs', { method: 'DELETE' }).then((r) => r.json())
 };
 
 const state = {
@@ -523,6 +525,78 @@ async function doTest() {
   }
 }
 
+function toggleLogs() {
+  const sidebar = $('logs-sidebar');
+  const isHidden = sidebar.classList.contains('hidden');
+  sidebar.classList.toggle('hidden', !isHidden);
+  if (isHidden) {
+    refreshLogs();
+  }
+}
+
+let logsData = [];
+
+async function refreshLogs() {
+  const res = await API.logs();
+  if (res.ok) {
+    logsData = res.data;
+    renderLogs();
+  } else {
+    toast(res.message || '加载日志失败', 'err');
+  }
+}
+
+function renderLogs() {
+  const tbody = $('logs-body');
+  tbody.innerHTML = '';
+  const hasLogs = logsData.length > 0;
+  $('logs-empty').classList.toggle('hidden', hasLogs);
+  $('logs-list').classList.toggle('hidden', !hasLogs);
+  for (const log of logsData) {
+    const tr = el('tr', { onclick: () => showLogDetail(log) });
+    const time = new Date(log.timestamp);
+    tr.appendChild(el('td', {}, time.toLocaleString('zh-CN')));
+    tr.appendChild(el('td', {}, el('span', { class: `method-badge method-${log.method}` }, log.method)));
+    tr.appendChild(el('td', { style: 'font-family: monospace;' }, log.path));
+    const hasQuery = Object.keys(log.query || {}).length > 0;
+    const hasBody = Object.keys(log.body || {}).length > 0;
+    const hasHeaders = Object.keys(log.headers || {}).length > 0;
+    let detail = [];
+    if (hasHeaders) detail.push(`${Object.keys(log.headers).length} headers`);
+    if (hasQuery) detail.push('有 query');
+    if (hasBody) detail.push('有 body');
+    tr.appendChild(el('td', { class: 'muted' }, detail.length ? detail.join(' · ') : '无额外参数'));
+    tbody.appendChild(tr);
+  }
+}
+
+function showLogDetail(log) {
+  const time = new Date(log.timestamp);
+  $('log-time').textContent = time.toLocaleString('zh-CN');
+  $('log-method').textContent = log.method;
+  $('log-path').textContent = log.path;
+  $('log-headers').textContent = JSON.stringify(log.headers || {}, null, 2);
+  $('log-query').textContent = JSON.stringify(log.query || {}, null, 2);
+  $('log-body').textContent = JSON.stringify(log.body || {}, null, 2);
+  $('log-detail-modal').classList.remove('hidden');
+}
+
+function closeLogDetail() {
+  $('log-detail-modal').classList.add('hidden');
+}
+
+async function clearLogs() {
+  if (!confirm('确认清空所有日志？')) return;
+  const res = await API.clearLogs();
+  if (res.ok) {
+    toast('日志已清空');
+    logsData = [];
+    renderLogs();
+  } else {
+    toast(res.message || '清空失败', 'err');
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   $('search').addEventListener('input', (e) => { state.filter = e.target.value; renderList(); });
   $('btn-new').addEventListener('click', newConfig);
@@ -543,6 +617,12 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   $('f-response-body').addEventListener('input', () => validateJsonArea('response-body'));
   $('f-error-format').addEventListener('input', () => validateJsonArea('error-format'));
+
+  $('btn-toggle-logs').addEventListener('click', toggleLogs);
+  $('btn-refresh-logs').addEventListener('click', refreshLogs);
+  $('btn-clear-logs').addEventListener('click', clearLogs);
+  $('btn-close-logs').addEventListener('click', toggleLogs);
+  $('btn-close-log-detail').addEventListener('click', closeLogDetail);
 
   refreshList();
 });

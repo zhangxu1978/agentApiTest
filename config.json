@@ -1,0 +1,9 @@
+{
+  "agent": {
+    "provider": "DeepSeek",
+    "apiKey": "sk-fdffdeff2b2a42c59a802614032e2e1d",
+    "model": "deepseek-v4-flash",
+    "baseUrl": "https://api.deepseek.com",
+    "temperature": 0.1
+  }
+}
