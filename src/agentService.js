@@ -165,6 +165,15 @@ async function callLLM(messages) {
 
   const url = new URL(`${config.baseUrl}/chat/completions`);
   
+  const toolMessages = messages.filter(m => m.role === 'tool');
+  if (toolMessages.length > 0) {
+    console.log('[agent] 发送的tool messages:', toolMessages.map(m => ({
+      tool_call_id: m.tool_call_id,
+      name: m.name,
+      role: m.role
+    })));
+  }
+  
   const body = JSON.stringify({
     model: config.model,
     messages,
@@ -191,9 +200,18 @@ async function callLLM(messages) {
   const response = await makeHttpRequest(options, body);
   
   if (response.status !== 200) {
+    console.error('[agent] LLM响应错误:', response.body);
     throw new Error(`LLM调用失败: ${response.status} - ${JSON.stringify(response.body)}`);
   }
 
+  const responseToolCalls = response.body.choices?.[0]?.message?.tool_calls;
+  if (responseToolCalls) {
+    console.log('[agent] 收到的tool_calls:', responseToolCalls.map(tc => ({
+      id: tc.id,
+      functionName: tc.function?.name
+    })));
+  }
+  
   return response.body;
 }
 
@@ -245,6 +263,13 @@ async function chat(messages) {
     const message = choice.message;
     
     if (message.tool_calls && message.tool_calls.length > 0) {
+      console.log('[agent] 收到工具调用:', message.tool_calls.map(tc => ({ 
+        toolCallId: tc.id, 
+        functionName: tc.function.name 
+      })));
+      
+      allMessages.push(message);
+      
       for (const toolCall of message.tool_calls) {
         const args = JSON.parse(toolCall.function.arguments);
         const toolResult = await callTool(toolCall.function.name, args);
@@ -258,10 +283,15 @@ async function chat(messages) {
         const toolMessage = {
           role: 'tool',
           content: JSON.stringify(toolResult),
+          name: toolCall.function.name,
           tool_call_id: toolCall.id
         };
         
-        allMessages.push(message);
+        console.log('[agent] 发送工具结果:', { 
+          toolCallId: toolCall.id, 
+          functionName: toolCall.function.name 
+        });
+        
         allMessages.push(toolMessage);
       }
     } else {
