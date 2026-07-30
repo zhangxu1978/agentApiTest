@@ -13,9 +13,16 @@
         <span class="logo">⚡</span>
         <span class="title">API Mock 测试工具</span>
       </div>
-      <div class="nav-links" style="display: flex; gap: 8px; margin-right: 16px;">
-        <a href="/" style="color: var(--primary); text-decoration: none; font-size: 13px; padding: 4px 8px; border-radius: 4px;">接口管理</a>
-        <a href="/agent.html" style="color: var(--muted); text-decoration: none; font-size: 13px; padding: 4px 8px; border-radius: 4px;">🤖 AI 助手</a>
+      <select id="theme-select">
+        <option value="dark">🌙 深蓝</option>
+        <option value="light">☀️ 浅色</option>
+        <option value="ocean">🌊 海洋</option>
+        <option value="warm">🔥 暖色</option>
+        <option value="forest">🌲 森林</option>
+      </select>
+      <div class="nav-links">
+        <a href="/" class="active">接口管理</a>
+        <a href="/agent.html">🤖 AI 助手</a>
       </div>
       <div class="topbar-actions">
         <input id="search" type="text" placeholder="搜索接口名称或路径..." />

@@ -18,6 +18,54 @@
   --code-bg: #0b1220;
 }
 
+[data-theme="light"] {
+  --bg: #f8fafc;
+  --panel: #ffffff;
+  --panel-2: #f1f5f9;
+  --border: #e2e8f0;
+  --text: #1e293b;
+  --muted: #64748b;
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --code-bg: #f1f5f9;
+}
+
+[data-theme="ocean"] {
+  --bg: #0c1929;
+  --panel: #162940;
+  --panel-2: #1e3a5f;
+  --border: #2a4a6f;
+  --text: #c8e1ff;
+  --muted: #7ab8ff;
+  --primary: #00d4ff;
+  --primary-hover: #00b8e6;
+  --code-bg: #08111d;
+}
+
+[data-theme="warm"] {
+  --bg: #1c1510;
+  --panel: #2d2319;
+  --panel-2: #3d3022;
+  --border: #5c4a35;
+  --text: #f5e6d3;
+  --muted: #b8a080;
+  --primary: #f97316;
+  --primary-hover: #ea580c;
+  --code-bg: #120d09;
+}
+
+[data-theme="forest"] {
+  --bg: #0d1b12;
+  --panel: #1a2f20;
+  --panel-2: #25412c;
+  --border: #3a5a42;
+  --text: #c7e0c9;
+  --muted: #8fb594;
+  --primary: #22c55e;
+  --primary-hover: #16a34a;
+  --code-bg: #08110a;
+}
+
 .hidden {
   display: none !important;
 }
@@ -316,6 +364,47 @@ input:focus, select:focus, textarea:focus { border-color: var(--primary); }
   font-size: 12px;
 }
 .test-result.hidden { display: none; }
+
+#theme-select {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  outline: none;
+}
+#theme-select:hover { border-color: var(--primary); }
+#theme-select:focus { border-color: var(--primary); }
+
+.nav-links {
+  display: flex;
+  gap: 8px;
+  background: rgba(59, 130, 246, 0.08);
+  padding: 4px;
+  border-radius: 6px;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+.nav-links a {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 13px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.nav-links a:hover {
+  color: var(--text);
+  background: rgba(59, 130, 246, 0.15);
+}
+.nav-links a.active {
+  color: var(--primary);
+  background: rgba(59, 130, 246, 0.2);
+}
 
 .toast {
   position: fixed;

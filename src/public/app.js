@@ -624,5 +624,15 @@ document.addEventListener('DOMContentLoaded', () => {
   $('btn-close-logs').addEventListener('click', toggleLogs);
   $('btn-close-log-detail').addEventListener('click', closeLogDetail);
 
+  const themeSelect = $('theme-select');
+  const savedTheme = localStorage.getItem('api-mock-theme') || 'dark';
+  document.documentElement.setAttribute('data-theme', savedTheme);
+  themeSelect.value = savedTheme;
+  themeSelect.addEventListener('change', (e) => {
+    const theme = e.target.value;
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('api-mock-theme', theme);
+  });
+
   refreshList();
 });

@@ -172,29 +172,6 @@
       40% { transform: scale(1); opacity: 1; }
     }
     
-    .nav-links {
-      display: flex;
-      gap: 8px;
-    }
-    
-    .nav-links a {
-      color: var(--muted);
-      text-decoration: none;
-      font-size: 13px;
-      padding: 4px 8px;
-      border-radius: 4px;
-      transition: all 0.15s;
-    }
-    
-    .nav-links a:hover {
-      color: var(--text);
-      background: var(--panel-2);
-    }
-    
-    .nav-links a.active {
-      color: var(--primary);
-    }
-    
     .empty-state {
       display: flex;
       flex-direction: column;
@@ -239,9 +216,16 @@
         <span class="logo">🤖</span>
         <span class="title">Agent 接口助手</span>
       </div>
+      <select id="theme-select">
+        <option value="dark">🌙 深蓝</option>
+        <option value="light">☀️ 浅色</option>
+        <option value="ocean">🌊 海洋</option>
+        <option value="warm">🔥 暖色</option>
+        <option value="forest">🌲 森林</option>
+      </select>
       <div class="nav-links">
         <a href="/">接口管理</a>
-        <a href="/agent.html" class="active">AI 助手</a>
+        <a href="/agent.html" class="active">🤖 AI 助手</a>
       </div>
     </div>
   </header>
@@ -425,6 +409,16 @@
       
       $('btn-send').addEventListener('click', sendMessage);
       $('btn-reload-config').addEventListener('click', reloadConfig);
+      
+      const themeSelect = $('theme-select');
+      const savedTheme = localStorage.getItem('api-mock-theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', savedTheme);
+      themeSelect.value = savedTheme;
+      themeSelect.addEventListener('change', (e) => {
+        const theme = e.target.value;
+        document.documentElement.setAttribute('data-theme', theme);
+        localStorage.setItem('api-mock-theme', theme);
+      });
       
       checkConfig();
     });
