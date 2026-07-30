@@ -1,0 +1,690 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>文件管理 - Agent 接口助手</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .files-layout {
+      display: flex;
+      gap: 16px;
+      padding: 16px;
+      min-height: calc(100vh - 60px);
+    }
+
+    .files-panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    .files-panel-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .files-panel-header h2 {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    .files-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+    }
+
+    .file-item {
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .file-item:hover {
+      background: var(--panel-2);
+      border-color: var(--primary);
+    }
+    .file-item.active {
+      border-color: var(--primary);
+      background: var(--panel-2);
+    }
+    .file-item .file-name {
+      font-weight: 600;
+      font-size: 14px;
+      word-break: break-all;
+    }
+    .file-item .file-meta {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 4px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .file-item .file-badge {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 8px;
+      font-size: 10px;
+      background: var(--code-bg);
+      color: var(--muted);
+    }
+    .file-item .file-badge.linked {
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--success);
+    }
+    .file-item .file-actions {
+      margin-top: 8px;
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .preview-pane {
+      flex: 1.6;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .preview-body {
+      flex: 1;
+      overflow: auto;
+      padding: 16px;
+      font-family: ui-monospace, monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .preview-empty {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      gap: 6px;
+      text-align: center;
+      padding: 20px;
+    }
+    .preview-empty h3 {
+      margin: 0;
+      color: var(--text);
+      font-size: 15px;
+    }
+    .preview-empty p {
+      margin: 0;
+      font-size: 13px;
+    }
+
+    .preview-header {
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .preview-header .preview-title {
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    .preview-actions {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .empty-list {
+      color: var(--muted);
+      text-align: center;
+      padding: 30px 12px;
+    }
+    .empty-list h3 {
+      margin: 0 0 6px 0;
+      color: var(--text);
+    }
+    .empty-list p {
+      margin: 0;
+      font-size: 13px;
+    }
+
+    .upload-zone {
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .upload-zone .upload-label {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .mount-list {
+      max-height: 280px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg);
+    }
+    .mount-row {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+    .mount-row:last-child { border-bottom: none; }
+    .mount-row .mount-info {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+    .mount-row .mount-info .mount-name {
+      font-weight: 600;
+      font-size: 13px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .mount-row .mount-info .mount-path {
+      font-size: 11px;
+      color: var(--muted);
+      font-family: ui-monospace, monospace;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .mount-row .mount-action {
+      display: flex;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .search-input {
+      flex: 1;
+      min-width: 120px;
+      padding: 6px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg);
+      color: var(--text);
+      outline: none;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 8px;
+      font-size: 11px;
+    }
+    .badge.linked {
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--success);
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <span class="logo">📁</span>
+        <span class="title">文件管理</span>
+      </div>
+      <select id="theme-select">
+        <option value="dark">🌙 深蓝</option>
+        <option value="light">☀️ 浅色</option>
+        <option value="ocean">🌊 海洋</option>
+        <option value="warm">🔥 暖色</option>
+        <option value="forest">🌲 森林</option>
+      </select>
+      <div class="nav-links">
+        <a href="/">接口管理</a>
+        <a href="/agent.html">🤖 AI 助手</a>
+        <a href="/files.html" class="active">📁 文件管理</a>
+      </div>
+    </div>
+  </header>
+
+  <div class="files-layout">
+    <aside class="files-panel">
+      <div class="files-panel-header">
+        <h2>已上传文件</h2>
+        <input id="search-files" class="search-input" placeholder="搜索文件名..." />
+        <button id="btn-refresh-files" class="btn btn-mini">刷新</button>
+      </div>
+      <div class="upload-zone">
+        <button id="btn-upload-here" class="btn btn-mini btn-primary">📎 上传文件</button>
+        <input id="file-input-here" type="file" hidden accept=".doc,.docx,.pdf,.xls,.xlsx,.txt,.md,.csv,.json,.png,.jpg,.jpeg,.gif,.bmp,.webp,.ppt,.pptx,.html,.htm" />
+        <span class="upload-label" id="upload-status">支持 doc/pdf/excel/图片/文本 等</span>
+      </div>
+      <div class="files-list" id="files-list">
+        <div class="empty-list" id="empty-list">
+          <h3>暂无上传文件</h3>
+          <p>点击「上传文件」按钮，或前往 AI 助手页面粘贴文件</p>
+        </div>
+      </div>
+    </aside>
+
+    <section class="files-panel preview-pane">
+      <div class="preview-header" id="preview-header" style="display:none;">
+        <div class="preview-title" id="preview-title">请选择左侧文件</div>
+        <div class="preview-actions" id="preview-actions"></div>
+      </div>
+      <div class="preview-body" id="preview-body">
+        <div class="preview-empty" id="preview-empty">
+          <h3>文件详情</h3>
+          <p>选择左侧的文件以预览 Markdown 内容、查看挂载的接口或挂载到新接口。</p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Mount modal -->
+  <div id="mount-modal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <span>挂载到接口</span>
+        <button id="btn-close-mount-modal" class="btn-mini">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:13px;color:var(--muted);">为该文件选择一个接口，标记此接口是根据此上传文件衍生而来：</p>
+        <input id="mount-search" class="search-input" placeholder="搜索接口..." style="width:100%;margin-bottom:8px;" />
+        <div class="mount-list" id="mount-configs"></div>
+        <div class="row-end" style="margin-top:10px;">
+          <button id="btn-create-and-mount" class="btn btn-primary">+ 新建接口并挂载</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script>
+    const FILE_API = {
+      list: () => fetch('/files/').then(r => r.json()),
+      get: (id) => fetch(`/files/${id}`).then(r => r.json()),
+      preview: (id) => fetch(`/files/${id}/preview`).then(r => r.json()),
+      remove: (id) => fetch(`/files/${id}`, { method: 'DELETE' }).then(r => r.json()),
+      upload: (file) => {
+        return new Promise((resolve, reject) => {
+          const fd = new FormData();
+          fd.append('file', file);
+          const xhr = new XMLHttpRequest();
+          xhr.open('POST', '/files/upload');
+          xhr.onload = () => {
+            try {
+              const r = JSON.parse(xhr.responseText);
+              if (r.ok) resolve(r.data); else reject(new Error(r.message || '上传失败'));
+            } catch (e) { reject(new Error('响应解析失败')); }
+          };
+          xhr.onerror = () => reject(new Error('网络错误'));
+          xhr.send(fd);
+        });
+      },
+      linkedConfigs: (id) => fetch(`/files/${id}/configs`).then(r => r.json()),
+      mount: (id, configId) => fetch(`/files/${id}/mount`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ configId })
+      }).then(r => r.json()),
+      unmount: (id, configId) => fetch(`/files/${id}/unmount`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ configId })
+      }).then(r => r.json()),
+      allConfigs: () => fetch('/files/meta/all-configs').then(r => r.json())
+    };
+
+    const CFG_API = {
+      create: (data) => fetch('/admin/api/configs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      }).then(r => r.json())
+    };
+
+    const $ = (id) => document.getElementById(id);
+
+    const state = {
+      files: [],
+      filter: '',
+      selectedId: null,
+      selectedFile: null,
+      linkedConfigs: [],
+      allConfigs: [],
+      mountFilter: ''
+    };
+
+    function toast(msg, type = 'ok') {
+      const t = $('toast');
+      t.textContent = msg;
+      t.className = 'toast ' + type;
+      setTimeout(() => t.classList.add('hidden'), 2400);
+    }
+
+    function formatSize(bytes) {
+      if (!bytes) return '0 B';
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / 1024 / 1024).toFixed(2) + ' MB';
+    }
+
+    function escapeHtml(text) {
+      if (text == null) return '';
+      return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    async function refreshFiles() {
+      const res = await FILE_API.list();
+      if (res.ok) {
+        state.files = res.data;
+        renderFileList();
+      } else {
+        toast(res.message || '加载失败', 'err');
+      }
+    }
+
+    function renderFileList() {
+      const wrap = $('files-list');
+      wrap.innerHTML = '';
+      const filtered = state.files.filter(f => {
+        if (!state.filter) return true;
+        return (f.original_name || '').toLowerCase().includes(state.filter.toLowerCase());
+      });
+      if (filtered.length === 0) {
+        wrap.innerHTML = `
+          <div class="empty-list">
+            <h3>${state.filter ? '没有匹配的文件' : '暂无上传文件'}</h3>
+            <p>${state.filter ? '尝试其他关键词' : '点击「上传文件」按钮上传第一个文件'}</p>
+          </div>`;
+        return;
+      }
+      for (const f of filtered) {
+        const item = document.createElement('div');
+        item.className = 'file-item' + (state.selectedId === f.id ? ' active' : '');
+        item.dataset.id = f.id;
+        item.innerHTML = `
+          <div class="file-name">${escapeHtml(f.original_name)}</div>
+          <div class="file-meta">
+            <span>ID: ${f.id}</span>
+            <span>${formatSize(f.size_bytes)}</span>
+            <span>${escapeHtml(f.source || 'upload')}</span>
+            <span>${escapeHtml(f.created_at || '')}</span>
+            <span class="file-badge ${f.link_count > 0 ? 'linked' : ''}">${f.link_count > 0 ? `已挂载 ×${f.link_count}` : '未挂载'}</span>
+          </div>
+          <div class="file-actions">
+            <button class="btn btn-mini btn-primary" data-act="preview">预览</button>
+            <button class="btn btn-mini" data-act="mount">挂载</button>
+            <a class="btn btn-mini" href="/files/${f.id}/download" target="_blank" rel="noopener">下载</a>
+            <button class="btn btn-mini btn-danger" data-act="delete">删除</button>
+          </div>`;
+        wrap.appendChild(item);
+      }
+    }
+
+    async function selectFile(id) {
+      state.selectedId = id;
+      state.selectedFile = state.files.find(f => f.id === id) || null;
+      renderFileList();
+      if (!state.selectedFile) {
+        $('preview-header').style.display = 'none';
+        $('preview-body').innerHTML = '<div class="preview-empty"><h3>文件不存在</h3><p>该文件已被删除，请刷新列表</p></div>';
+        return;
+      }
+      $('preview-header').style.display = 'flex';
+      $('preview-title').textContent = state.selectedFile.original_name;
+      $('preview-actions').innerHTML = `
+        <a class="btn btn-mini" href="/files/${id}/download" target="_blank" rel="noopener">下载原文件</a>
+        <button class="btn btn-mini btn-primary" id="btn-mount-from-preview">挂载到接口</button>
+        <button class="btn btn-mini" id="btn-copy-md">复制 Markdown</button>
+        <button class="btn btn-mini btn-danger" id="btn-delete-from-preview">删除</button>
+      `;
+      $('preview-body').innerHTML = '<div class="preview-empty"><p>加载中...</p></div>';
+
+      const [previewRes, linkedRes] = await Promise.all([
+        FILE_API.preview(id),
+        FILE_API.linkedConfigs(id)
+      ]);
+
+      if (!previewRes.ok) {
+        $('preview-body').innerHTML = `<div class="preview-empty"><h3>加载失败</h3><p>${escapeHtml(previewRes.message || '')}</p></div>`;
+        return;
+      }
+
+      state.linkedConfigs = linkedRes.ok ? linkedRes.data : [];
+      const content = previewRes.data?.content || '(空)';
+      $('preview-body').innerHTML = `
+        <div style="margin-bottom:12px;color:var(--muted);font-size:12px;">
+          Markdown 预览（${content.length} 字符） · 已挂载到 ${state.linkedConfigs.length} 个接口
+        </div>
+        <pre style="margin:0;background:var(--code-bg);padding:12px;border-radius:6px;overflow:auto;">${escapeHtml(content)}</pre>
+        <div id="linked-configs-section" style="margin-top:16px;">
+          <h3 style="font-size:14px;margin:0 0 8px 0;">已挂载接口</h3>
+          <div id="linked-configs-body"></div>
+        </div>
+      `;
+      renderLinkedConfigs();
+
+      $('btn-mount-from-preview').addEventListener('click', () => openMountModal(id));
+      $('btn-delete-from-preview').addEventListener('click', () => deleteFile(id));
+      $('btn-copy-md').addEventListener('click', () => {
+        navigator.clipboard.writeText(content).then(
+          () => toast('Markdown 内容已复制到剪贴板'),
+          () => toast('复制失败，请手动选择', 'err')
+        );
+      });
+    }
+
+    function renderLinkedConfigs() {
+      const wrap = $('linked-configs-body');
+      if (!wrap) return;
+      if (state.linkedConfigs.length === 0) {
+        wrap.innerHTML = '<p style="color:var(--muted);font-size:13px;">该文件当前没有挂载到任何接口。</p>';
+        return;
+      }
+      wrap.innerHTML = '<div class="mount-list">' + state.linkedConfigs.map(c => `
+        <div class="mount-row">
+          <div class="mount-info">
+            <div class="mount-name">${escapeHtml(c.name)}</div>
+            <div class="mount-path">${escapeHtml(c.method)} ${escapeHtml(c.path)}</div>
+          </div>
+          <div class="mount-action">
+            <a class="btn btn-mini" href="/?id=${c.id}" target="_blank">打开</a>
+            <button class="btn btn-mini btn-danger" data-unmount="${c.id}">解绑</button>
+          </div>
+        </div>`).join('') + '</div>';
+      wrap.querySelectorAll('[data-unmount]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const cid = Number(btn.dataset.unmount);
+          if (!confirm('确认解除该接口与此文件的挂载？')) return;
+          const res = await FILE_API.unmount(state.selectedId, cid);
+          if (res.ok) {
+            toast('已解绑');
+            await selectFile(state.selectedId);
+            await refreshFiles();
+          } else {
+            toast(res.message || '解绑失败', 'err');
+          }
+        });
+      });
+    }
+
+    async function openMountModal(fileId) {
+      const res = await FILE_API.allConfigs();
+      if (!res.ok) { toast(res.message || '加载接口列表失败', 'err'); return; }
+      state.allConfigs = res.data;
+      state.mountFilter = '';
+      $('mount-search').value = '';
+      renderMountConfigs();
+      $('mount-modal').classList.remove('hidden');
+      $('mount-modal').dataset.fileId = fileId;
+    }
+
+    function renderMountConfigs() {
+      const wrap = $('mount-configs');
+      const filtered = state.allConfigs.filter(c => {
+        if (!state.mountFilter) return true;
+        const q = state.mountFilter.toLowerCase();
+        return (c.name || '').toLowerCase().includes(q) ||
+               (c.path || '').toLowerCase().includes(q);
+      });
+      if (filtered.length === 0) {
+        wrap.innerHTML = '<div class="empty-list" style="padding:18px;"><p>没有匹配的接口</p></div>';
+        return;
+      }
+      wrap.innerHTML = filtered.map(c => `
+        <div class="mount-row">
+          <div class="mount-info">
+            <div class="mount-name">${escapeHtml(c.name)} ${c.source_file_id == state.selectedId ? '<span class="badge linked">已挂载</span>' : ''}</div>
+            <div class="mount-path">${escapeHtml(c.method)} ${escapeHtml(c.path)}</div>
+          </div>
+          <div class="mount-action">
+            <button class="btn btn-mini btn-primary" data-mount="${c.id}">${c.source_file_id == state.selectedId ? '覆盖挂载' : '挂载'}</button>
+          </div>
+        </div>`).join('');
+      wrap.querySelectorAll('[data-mount]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const cid = Number(btn.dataset.mount);
+          const fileId = Number($('mount-modal').dataset.fileId);
+          const res = await FILE_API.mount(fileId, cid);
+          if (res.ok) {
+            toast('挂载成功');
+            $('mount-modal').classList.add('hidden');
+            await refreshFiles();
+            await selectFile(fileId);
+          } else {
+            toast(res.message || '挂载失败', 'err');
+          }
+        });
+      });
+    }
+
+    async function deleteFile(id) {
+      if (!confirm('确认删除该文件？如已挂载，请先解除挂载。')) return;
+      const res = await FILE_API.remove(id);
+      if (res.ok) {
+        toast('已删除');
+        state.selectedId = null;
+        state.selectedFile = null;
+        $('preview-header').style.display = 'none';
+        $('preview-body').innerHTML = '<div class="preview-empty"><h3>文件详情</h3><p>选择左侧的文件以预览 Markdown 内容、查看挂载的接口或挂载到新接口。</p></div>';
+        await refreshFiles();
+      } else {
+        toast(res.message || '删除失败', 'err');
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      const themeSelect = $('theme-select');
+      const savedTheme = localStorage.getItem('api-mock-theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', savedTheme);
+      themeSelect.value = savedTheme;
+      themeSelect.addEventListener('change', (ev) => {
+        const theme = ev.target.value;
+        document.documentElement.setAttribute('data-theme', theme);
+        localStorage.setItem('api-mock-theme', theme);
+      });
+
+      $('search-files').addEventListener('input', (e) => {
+        state.filter = e.target.value;
+        renderFileList();
+      });
+      $('btn-refresh-files').addEventListener('click', refreshFiles);
+
+      $('files-list').addEventListener('click', (e) => {
+        const act = e.target.dataset?.act;
+        const item = e.target.closest('.file-item');
+        if (!item) return;
+        const id = Number(item.dataset.id);
+        if (act === 'preview') selectFile(id);
+        else if (act === 'mount') openMountModal(id);
+        else if (act === 'delete') deleteFile(id);
+        else selectFile(id);
+      });
+
+      $('btn-upload-here').addEventListener('click', () => $('file-input-here').click());
+      $('file-input-here').addEventListener('change', async (e) => {
+        const files = Array.from(e.target.files || []);
+        for (const file of files) {
+          $('upload-status').textContent = `正在上传并转换: ${file.name} ...`;
+          try {
+            const r = await FILE_API.upload(file);
+            toast(`✓ ${file.name} 已转换（id=${r.id}）`);
+            await refreshFiles();
+            await selectFile(r.id);
+          } catch (err) {
+            toast(`上传失败: ${err.message}`, 'err');
+          }
+        }
+        $('upload-status').textContent = '支持 doc/pdf/excel/图片/文本 等';
+        e.target.value = '';
+      });
+
+      $('btn-close-mount-modal').addEventListener('click', () => $('mount-modal').classList.add('hidden'));
+      $('mount-modal').addEventListener('click', (e) => {
+        if (e.target.id === 'mount-modal') $('mount-modal').classList.add('hidden');
+      });
+      $('mount-search').addEventListener('input', (e) => {
+        state.mountFilter = e.target.value;
+        renderMountConfigs();
+      });
+      $('btn-create-and-mount').addEventListener('click', async () => {
+        const fileId = Number($('mount-modal').dataset.fileId);
+        const file = state.files.find(f => f.id === fileId);
+        const name = prompt('新接口名称（描述此接口是依据文件衍生的）：', `基于 ${file?.original_name || '文件'} 创建的接口`);
+        if (!name) return;
+        const path = prompt('访问路径（以 / 开头）：', '/api/from-file/' + (file ? file.name : 'new'));
+        if (!path) return;
+        const method = (prompt('HTTP 方法（GET/POST/PUT/DELETE/PATCH）：', 'POST') || 'POST').toUpperCase();
+        if (!['GET', 'POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
+          toast('非法的 HTTP 方法', 'err'); return;
+        }
+        const response_body = prompt('返回数据 (JSON 字符串)：', '{"code":0,"message":"ok","data":{}}');
+        if (!response_body) return;
+        const error_format = prompt('错误格式 (JSON 字符串)：', '{"code":1,"message":"{{message}}","field":"{{field}}"}');
+        if (!error_format) return;
+        const res = await CFG_API.create({
+          name, path, method, response_body, error_format,
+          description: `由文件 ${file?.original_name || ''} (#${fileId}) 衍生`,
+          source_file_id: fileId
+        });
+        if (res.ok) {
+          toast(`接口已创建（ID: ${res.data.id}）`);
+          $('mount-modal').classList.add('hidden');
+          await refreshFiles();
+          await selectFile(fileId);
+        } else {
+          toast(res.message || '创建失败', 'err');
+        }
+      });
+
+      await refreshFiles();
+    });
+  </script>
+</body>
+</html>

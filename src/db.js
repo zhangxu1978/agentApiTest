@@ -57,10 +57,25 @@ CREATE TABLE IF NOT EXISTS api_headers (
   FOREIGN KEY (config_id) REFERENCES api_configs(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS uploaded_files (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  name            TEXT    NOT NULL,
+  original_name   TEXT    NOT NULL,
+  original_path   TEXT    NOT NULL,
+  md_path         TEXT    NOT NULL,
+  mime_type       TEXT,
+  size_bytes      INTEGER NOT NULL DEFAULT 0,
+  source          TEXT    NOT NULL DEFAULT 'upload',
+  description     TEXT,
+  created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+  updated_at      TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_api_params_config ON api_params(config_id);
 CREATE INDEX IF NOT EXISTS idx_api_params_parent  ON api_params(parent_id);
 CREATE INDEX IF NOT EXISTS idx_api_headers_config ON api_headers(config_id);
 CREATE INDEX IF NOT EXISTS idx_api_configs_path   ON api_configs(path);
+CREATE INDEX IF NOT EXISTS idx_uploaded_files     ON uploaded_files(id);
 `;
 
 db.exec(SCHEMA);
@@ -74,5 +89,6 @@ function ensureColumn(table, column, decl) {
 }
 ensureColumn('api_params', 'parent_id',   'parent_id INTEGER');
 ensureColumn('api_params', 'order_index', 'order_index INTEGER NOT NULL DEFAULT 0');
+ensureColumn('api_configs', 'source_file_id', 'source_file_id INTEGER');
 
 module.exports = db;

@@ -8,3 +8,6 @@ Thumbs.db
 .vscode/
 .idea/
 *.log
+data/markdown/*
+data/uploads/*
+

@@ -181,6 +181,7 @@ function listConfigs() {
       response_body: r.response_body,
       error_format: r.error_format,
       description: r.description,
+      source_file_id: r.source_file_id || null,
       created_at: r.created_at,
       updated_at: r.updated_at
     };
@@ -204,6 +205,7 @@ function getConfig(id) {
     response_body: row.response_body,
     error_format: row.error_format,
     description: row.description,
+    source_file_id: row.source_file_id || null,
     created_at: row.created_at,
     updated_at: row.updated_at,
     ...loadChildren(id)
@@ -282,8 +284,8 @@ function createConfig(payload) {
   const now = nowIso();
   const tx = db.transaction(() => {
     const info = db.prepare(`
-      INSERT INTO api_configs (name, path, method, content_type, response_status, response_body, error_format, description, created_at, updated_at)
-      VALUES (@name, @path, @method, @content_type, @response_status, @response_body, @error_format, @description, @now, @now)
+      INSERT INTO api_configs (name, path, method, content_type, response_status, response_body, error_format, description, source_file_id, created_at, updated_at)
+      VALUES (@name, @path, @method, @content_type, @response_status, @response_body, @error_format, @description, @source_file_id, @now, @now)
     `).run({
       name: payload.name,
       path: payload.path,
@@ -293,6 +295,7 @@ function createConfig(payload) {
       response_body: normalizeBody(payload.response_body),
       error_format: normalizeBody(payload.error_format),
       description: payload.description || null,
+      source_file_id: payload.source_file_id ? Number(payload.source_file_id) : null,
       now
     });
     const id = info.lastInsertRowid;
@@ -337,7 +340,7 @@ function updateConfig(id, payload) {
       UPDATE api_configs
       SET name=@name, path=@path, method=@method, content_type=@content_type,
           response_status=@response_status, response_body=@response_body, error_format=@error_format,
-          description=@description, updated_at=@now
+          description=@description, source_file_id=@source_file_id, updated_at=@now
       WHERE id=@id
     `).run({
       id,
@@ -349,6 +352,7 @@ function updateConfig(id, payload) {
       response_body: payload.response_body !== undefined ? normalizeBody(payload.response_body) : existing.response_body,
       error_format: payload.error_format !== undefined ? normalizeBody(payload.error_format) : existing.error_format,
       description: payload.description !== undefined ? payload.description : existing.description,
+      source_file_id: payload.source_file_id !== undefined ? (payload.source_file_id ? Number(payload.source_file_id) : null) : existing.source_file_id,
       now
     });
     if (Array.isArray(payload.params)) {

@@ -123,13 +123,23 @@
       background: var(--panel);
       border-top: 1px solid var(--border);
       display: flex;
-      gap: 10px;
+      flex-direction: column;
+      gap: 8px;
     }
-    
-    .chat-input textarea {
-      flex: 1;
+
+    .chat-input > textarea { display: none; }
+
+    .input-row {
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+      width: 100%;
+    }
+    .input-row textarea {
+      flex: 1 1 auto;
+      min-width: 0;
       min-height: 44px;
-      max-height: 120px;
+      max-height: 160px;
       resize: none;
       padding: 10px 14px;
       background: var(--bg);
@@ -139,14 +149,22 @@
       font-size: 14px;
       outline: none;
     }
-    
-    .chat-input textarea:focus {
+    .input-row textarea:focus {
       border-color: var(--primary);
     }
-    
-    .chat-input button {
-      padding: 10px 20px;
-      align-self: flex-end;
+    .input-row > button {
+      flex-shrink: 0;
+      align-self: stretch;
+      height: auto;
+      min-height: 44px;
+    }
+    .input-row .icon-btn {
+      width: 44px;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
     }
     
     .typing-indicator {
@@ -207,6 +225,54 @@
       background: rgba(239, 68, 68, 0.15);
       color: var(--danger);
     }
+
+    .file-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 8px 16px 0 16px;
+      background: var(--panel);
+      max-height: 90px;
+      overflow-y: auto;
+    }
+    .file-chips:empty { display: none; }
+    .file-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      border-radius: 14px;
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      font-size: 12px;
+      max-width: 240px;
+    }
+    .file-chip .chip-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .file-chip .chip-remove {
+      cursor: pointer;
+      color: var(--muted);
+      font-weight: 700;
+      line-height: 1;
+    }
+    .file-chip .chip-remove:hover { color: var(--danger); }
+    .file-chip .chip-loading {
+      color: var(--warn);
+      font-size: 11px;
+    }
+    .file-chip.attached .chip-loading { display: none; }
+
+    .upload-progress {
+      display: none;
+      padding: 6px 16px;
+      font-size: 12px;
+      color: var(--muted);
+      background: var(--panel);
+    }
+    .upload-progress.active { display: block; }
   </style>
 </head>
 <body>
@@ -226,6 +292,7 @@
       <div class="nav-links">
         <a href="/">接口管理</a>
         <a href="/agent.html" class="active">🤖 AI 助手</a>
+        <a href="/files.html">📁 文件管理</a>
       </div>
     </div>
   </header>
@@ -248,8 +315,14 @@
     </div>
 
     <div class="chat-input">
-      <textarea id="input-message" placeholder="输入您的请求，例如：创建一个获取用户列表的GET接口"></textarea>
-      <button id="btn-send" class="btn btn-primary">发送</button>
+      <div class="file-chips" id="file-chips"></div>
+      <div class="upload-progress" id="upload-progress"></div>
+      <div class="input-row">
+        <button id="btn-upload" class="btn icon-btn" title="上传文件">📎</button>
+        <input id="file-input" type="file" hidden accept=".doc,.docx,.pdf,.xls,.xlsx,.txt,.md,.csv,.json,.png,.jpg,.jpeg,.gif,.bmp,.webp,.ppt,.pptx,.html,.htm" />
+        <textarea id="input-message" placeholder="输入您的请求（支持直接 Ctrl+V 粘贴文件/图片）"></textarea>
+        <button id="btn-send" class="btn btn-primary">发送</button>
+      </div>
     </div>
   </div>
 
@@ -257,18 +330,43 @@
 
   <script>
     const API = {
-      chat: (messages) => fetch('/agent/chat', {
+      chat: (messages, fileIds) => fetch('/agent/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages })
+        body: JSON.stringify({ messages, fileIds })
       }).then(r => r.json()),
       getConfig: () => fetch('/agent/config').then(r => r.json()),
-      reloadConfig: () => fetch('/agent/config/reload', { method: 'POST' }).then(r => r.json())
+      reloadConfig: () => fetch('/agent/config/reload', { method: 'POST' }).then(r => r.json()),
+      uploadFile: (file, onProgress) => {
+        return new Promise((resolve, reject) => {
+          const fd = new FormData();
+          fd.append('file', file);
+          const xhr = new XMLHttpRequest();
+          xhr.open('POST', '/files/upload');
+          xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable && onProgress) onProgress(Math.round(e.loaded / e.total * 100));
+          };
+          xhr.onload = () => {
+            try {
+              const r = JSON.parse(xhr.responseText);
+              if (r.ok) resolve(r.data); else reject(new Error(r.message || '上传失败'));
+            } catch (e) { reject(new Error('响应解析失败')); }
+          };
+          xhr.onerror = () => reject(new Error('网络错误'));
+          xhr.send(fd);
+        });
+      },
+      pasteText: (name, content) => fetch('/files/paste', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, content })
+      }).then(r => r.json())
     };
 
     const $ = id => document.getElementById(id);
 
     let messages = [];
+    const attachedFiles = []; // [{id, name, uploading?}]
 
     function toast(msg, type = 'ok') {
       const t = $('toast');
@@ -277,43 +375,134 @@
       setTimeout(() => t.classList.add('hidden'), 2400);
     }
 
+    function renderChips() {
+      const wrap = $('file-chips');
+      wrap.innerHTML = '';
+      attachedFiles.forEach((f, idx) => {
+        const chip = document.createElement('div');
+        chip.className = 'file-chip' + (f.id ? ' attached' : '');
+        const name = document.createElement('span');
+        name.className = 'chip-name';
+        name.textContent = f.name;
+        name.title = f.name;
+        const loading = document.createElement('span');
+        loading.className = 'chip-loading';
+        loading.textContent = f.id ? '' : '⏳ 上传中';
+        const x = document.createElement('span');
+        x.className = 'chip-remove';
+        x.textContent = '×';
+        x.title = '移除';
+        x.addEventListener('click', () => {
+          attachedFiles.splice(idx, 1);
+          renderChips();
+        });
+        chip.appendChild(name);
+        chip.appendChild(loading);
+        chip.appendChild(x);
+        wrap.appendChild(chip);
+      });
+    }
+
+    function setProgress(text, active = true) {
+      const p = $('upload-progress');
+      p.textContent = text;
+      p.classList.toggle('active', active);
+    }
+
+    async function handleFiles(fileList) {
+      const files = Array.from(fileList || []);
+      if (files.length === 0) return;
+      for (const file of files) {
+        const localId = `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+        const placeholder = { localId, name: file.name };
+        attachedFiles.push(placeholder);
+        renderChips();
+        try {
+          setProgress(`正在上传并转换: ${file.name}`);
+          const result = await API.uploadFile(file);
+          // Remove the placeholder
+          const i = attachedFiles.findIndex(x => x.localId === localId);
+          if (i >= 0) attachedFiles.splice(i, 1);
+          attachedFiles.push({ id: result.id, name: result.original_name });
+          renderChips();
+          setProgress(`✓ ${file.name} 已转换为 Markdown（id=${result.id}）`);
+          setTimeout(() => setProgress('', false), 2400);
+        } catch (e) {
+          const i = attachedFiles.findIndex(x => x.localId === localId);
+          if (i >= 0) attachedFiles.splice(i, 1);
+          renderChips();
+          setProgress('');
+          toast(`上传 ${file.name} 失败: ${e.message}`, 'err');
+        }
+      }
+    }
+
+    async function handlePastedText(text, suggestedName) {
+      if (!text || !text.trim()) return false;
+      const trimmed = text.trim();
+      if (trimmed.length === 0) return false;
+      const localId = `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const displayName = suggestedName || `pasted-${new Date().toISOString().replace(/[:.]/g, '-')}.txt`;
+      attachedFiles.push({ localId, name: displayName });
+      renderChips();
+      try {
+        setProgress(`正在保存粘贴内容: ${displayName}`);
+        const res = await API.pasteText(displayName, trimmed);
+        if (!res.ok) throw new Error(res.message || '保存失败');
+        const i = attachedFiles.findIndex(x => x.localId === localId);
+        if (i >= 0) attachedFiles.splice(i, 1);
+        attachedFiles.push({ id: res.data.id, name: res.data.original_name });
+        renderChips();
+        setProgress(`✓ ${displayName} 已保存（id=${res.data.id}）`);
+        setTimeout(() => setProgress('', false), 2400);
+        return true;
+      } catch (e) {
+        const i = attachedFiles.findIndex(x => x.localId === localId);
+        if (i >= 0) attachedFiles.splice(i, 1);
+        renderChips();
+        setProgress('');
+        toast(`保存失败: ${e.message}`, 'err');
+        return true; // consumed the text so caller shouldn't insert it
+      }
+    }
+
     function addMessage(role, content, toolCalls = []) {
       const container = $('chat-messages');
       $('empty-state')?.classList.add('hidden');
-      
+
       const messageEl = document.createElement('div');
       messageEl.className = `message ${role}`;
-      
+
       const avatar = document.createElement('div');
       avatar.className = 'message-avatar';
       avatar.textContent = role === 'user' ? '👤' : '🤖';
-      
+
       const contentEl = document.createElement('div');
       contentEl.className = 'message-content';
       contentEl.textContent = content;
-      
+
       messageEl.appendChild(avatar);
       messageEl.appendChild(contentEl);
-      
+
       if (toolCalls && toolCalls.length > 0) {
         const toolsContainer = document.createElement('div');
         toolsContainer.className = 'tool-calls';
-        
+
         toolCalls.forEach((toolCall, index) => {
           const toolEl = document.createElement('div');
           toolEl.className = 'tool-call';
-          
+
           const toolName = document.createElement('div');
           toolName.innerHTML = `<span style="color: var(--muted); font-size: 11px;">[工具调用 ${index + 1}]</span> <span class="tool-name">${toolCall.name}</span>`;
           toolEl.appendChild(toolName);
-          
+
           const toolArgs = document.createElement('div');
           toolArgs.style.marginTop = '4px';
           toolArgs.style.fontSize = '11px';
           toolArgs.style.color = 'var(--muted)';
           toolArgs.textContent = `参数: ${JSON.stringify(toolCall.args)}`;
           toolEl.appendChild(toolArgs);
-          
+
           const resultEl = document.createElement('div');
           resultEl.className = 'tool-result';
           if (toolCall.result.success) {
@@ -328,39 +517,45 @@
           toolEl.appendChild(resultEl);
           toolsContainer.appendChild(toolEl);
         });
-        
+
         messageEl.appendChild(toolsContainer);
       }
-      
+
       container.appendChild(messageEl);
       container.scrollTop = container.scrollHeight;
-      
+
       return messageEl;
     }
 
     async function sendMessage() {
       const input = $('input-message');
       const text = input.value.trim();
-      
-      if (!text) return;
-      
+
+      if (!text && attachedFiles.length === 0) return;
+
       input.value = '';
-      
-      addMessage('user', text);
-      
+
+      const fileIds = attachedFiles.filter(f => f.id).map(f => f.id);
+      const attachedNote = fileIds.length > 0
+        ? (text ? `${text}\n\n[已附带 ${fileIds.length} 个上传文件]` : `[已附带 ${fileIds.length} 个上传文件]（请基于这些文件内容给我答复）`)
+        : `[已附带 ${fileIds.length} 个上传文件]（请基于这些文件内容给我答复）`;
+
+      const finalText = text || attachedNote;
+      addMessage('user', text ? text : `📎 已上传 ${fileIds.length} 个文件`);
+
       const container = $('chat-messages');
       const typingEl = document.createElement('div');
       typingEl.className = 'message assistant';
       typingEl.innerHTML = '<div class="message-avatar">🤖</div><div class="message-content"><div class="typing-indicator"><span></span><span></span><span></span></div></div>';
       container.appendChild(typingEl);
       container.scrollTop = container.scrollHeight;
-      
+
       try {
-        messages.push({ role: 'user', content: text });
-        const res = await API.chat(messages);
-        
+        messages.push({ role: 'user', content: finalText });
+        const res = await API.chat(messages, fileIds);
+
         container.removeChild(typingEl);
-        
+
         if (res.ok && res.data) {
           const { content, toolCalls = [] } = res.data;
           messages.push({ role: 'assistant', content });
@@ -379,7 +574,7 @@
     async function checkConfig() {
       const res = await API.getConfig();
       const status = $('config-status');
-      
+
       if (res.ok && res.data?.agent?.apiKey) {
         status.textContent = '✓ 已配置';
         status.className = 'config-status ok';
@@ -400,26 +595,62 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-      $('input-message').addEventListener('keydown', (e) => {
+      const input = $('input-message');
+
+      input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
           sendMessage();
         }
       });
-      
+
+      // Paste handler: intercept file drops from clipboard
+      input.addEventListener('paste', async (e) => {
+        if (!e.clipboardData) return;
+        const items = e.clipboardData.items;
+        const files = [];
+        for (const item of items) {
+          if (item.kind === 'file') {
+            const f = item.getAsFile();
+            if (f) files.push(f);
+          }
+        }
+        if (files.length > 0) {
+          e.preventDefault();
+          await handleFiles(files);
+          return;
+        }
+        // Plain text paste — also treat as a file if Ctrl+Shift+V or special triggers
+        const text = e.clipboardData.getData('text/plain');
+        if (!text) return;
+        // For short snippets keep as inline text; for very large blobs, save as a file
+        const LARGE = 2000;
+        const isPlainPaste = !e.shiftKey && !e.ctrlKey;
+        if (isPlainPaste && text.length < LARGE) return; // leave as-is
+        e.preventDefault();
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const name = `pasted-${stamp}.txt`;
+        await handlePastedText(text, name);
+      });
+
       $('btn-send').addEventListener('click', sendMessage);
       $('btn-reload-config').addEventListener('click', reloadConfig);
-      
+      $('btn-upload').addEventListener('click', () => $('file-input').click());
+      $('file-input').addEventListener('change', async (e) => {
+        await handleFiles(e.target.files);
+        e.target.value = '';
+      });
+
       const themeSelect = $('theme-select');
       const savedTheme = localStorage.getItem('api-mock-theme') || 'dark';
       document.documentElement.setAttribute('data-theme', savedTheme);
       themeSelect.value = savedTheme;
-      themeSelect.addEventListener('change', (e) => {
-        const theme = e.target.value;
+      themeSelect.addEventListener('change', (ev) => {
+        const theme = ev.target.value;
         document.documentElement.setAttribute('data-theme', theme);
         localStorage.setItem('api-mock-theme', theme);
       });
-      
+
       checkConfig();
     });
   </script>

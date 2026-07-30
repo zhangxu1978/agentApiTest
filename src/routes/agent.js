@@ -7,12 +7,13 @@ const router = express.Router();
 
 router.post('/chat', async (req, res) => {
   try {
-    const { messages } = req.body;
+    const { messages, fileIds } = req.body;
     if (!Array.isArray(messages)) {
       return res.status(400).json({ ok: false, message: 'messages 必须是数组' });
     }
 
-    const response = await agentService.chat(messages);
+    const validFileIds = Array.isArray(fileIds) ? fileIds.filter(x => x != null) : [];
+    const response = await agentService.chat(messages, validFileIds);
     res.json({ ok: true, data: response });
   } catch (e) {
     console.error('[agent] 聊天错误:', e);

@@ -69,7 +69,8 @@ function renderList() {
     });
     li.appendChild(el('div', { class: 'row1' },
       el('span', { class: `method-badge method-${c.method}` }, c.method),
-      el('span', { class: 'name' }, c.name)
+      el('span', { class: 'name' }, c.name),
+      c.source_file_id ? el('span', { class: 'file-badge linked', title: '该接口由上传文件衍生' }, `📁 #${c.source_file_id}`) : null
     ));
     li.appendChild(el('div', { class: 'path' }, c.path));
     li.appendChild(el('div', { class: 'meta' }, `${c.param_count} 参数 · ${c.header_count} 头 · ${c.response_status}`));

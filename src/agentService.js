@@ -6,6 +6,7 @@ const http = require('http');
 const https = require('https');
 
 const configService = require('./configService');
+const fileService = require('./fileService');
 
 let agentConfig = null;
 
@@ -61,6 +62,7 @@ const TOOLS = [
           content_type: { type: 'string', description: '响应内容类型，默认 application/json; charset=utf-8' },
           error_format: { type: 'string', description: '错误响应格式，必须是有效的JSON字符串，支持占位符：{{code}} {{message}} {{field}}' },
           description: { type: 'string', description: '接口备注说明' },
+          source_file_id: { type: 'integer', description: '挂载的上传文件ID（可选）' },
           params: { type: 'array', description: '入参定义数组' },
           headers: { type: 'array', description: '请求头校验数组' }
         },
@@ -85,6 +87,7 @@ const TOOLS = [
           content_type: { type: 'string', description: '响应内容类型' },
           error_format: { type: 'string', description: '错误响应格式' },
           description: { type: 'string', description: '接口备注说明' },
+          source_file_id: { type: 'integer', description: '挂载的上传文件ID（传 null 表示解绑）' },
           params: { type: 'array', description: '入参定义数组' },
           headers: { type: 'array', description: '请求头校验数组' }
         },
@@ -105,6 +108,28 @@ const TOOLS = [
         required: ['id']
       }
     }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'listFiles',
+      description: '获取所有已上传的文件列表',
+      parameters: { type: 'object', properties: {}, required: [] }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'getFile',
+      description: '查看某个上传文件的内容（Markdown 形式）',
+      parameters: {
+        type: 'object',
+        properties: {
+          id: { type: 'integer', description: '文件ID' }
+        },
+        required: ['id']
+      }
+    }
   }
 ];
 
@@ -112,9 +137,10 @@ async function callTool(name, args) {
   switch (name) {
     case 'listConfigs':
       return { success: true, data: configService.listConfigs() };
-    case 'getConfig':
+    case 'getConfig': {
       const config = configService.getConfig(args.id);
       return config ? { success: true, data: config } : { success: false, message: '配置不存在' };
+    }
     case 'createConfig':
       try {
         const data = configService.createConfig(args);
@@ -129,9 +155,18 @@ async function callTool(name, args) {
       } catch (e) {
         return { success: false, message: e.message };
       }
-    case 'deleteConfig':
+    case 'deleteConfig': {
       const ok = configService.deleteConfig(args.id);
       return ok ? { success: true } : { success: false, message: '配置不存在' };
+    }
+    case 'listFiles':
+      return { success: true, data: fileService.listFiles() };
+    case 'getFile': {
+      const file = fileService.getFile(args.id);
+      if (!file) return { success: false, message: '文件不存在' };
+      const md = fileService.readMd(file.md_path);
+      return { success: true, data: { id: file.id, name: file.name, original_name: file.original_name, content: md } };
+    }
     default:
       return { success: false, message: `未知工具: ${name}` };
   }
@@ -164,7 +199,7 @@ async function callLLM(messages) {
   }
 
   const url = new URL(`${config.baseUrl}/chat/completions`);
-  
+
   const toolMessages = messages.filter(m => m.role === 'tool');
   if (toolMessages.length > 0) {
     console.log('[agent] 发送的tool messages:', toolMessages.map(m => ({
@@ -173,7 +208,7 @@ async function callLLM(messages) {
       role: m.role
     })));
   }
-  
+
   const body = JSON.stringify({
     model: config.model,
     messages,
@@ -198,7 +233,7 @@ async function callLLM(messages) {
   };
 
   const response = await makeHttpRequest(options, body);
-  
+
   if (response.status !== 200) {
     console.error('[agent] LLM响应错误:', response.body);
     throw new Error(`LLM调用失败: ${response.status} - ${JSON.stringify(response.body)}`);
@@ -211,13 +246,37 @@ async function callLLM(messages) {
       functionName: tc.function?.name
     })));
   }
-  
+
   return response.body;
 }
 
-async function chat(messages) {
+function buildFileContext(fileIds) {
+  if (!Array.isArray(fileIds) || fileIds.length === 0) return null;
+  const sections = [];
+  const truncated = [];
+  for (const fid of fileIds) {
+    const file = fileService.getFile(fid);
+    if (!file) continue;
+    let md = fileService.readMd(file.md_path);
+    const MAX = 20000;
+    let wasTruncated = false;
+    if (md.length > MAX) {
+      md = md.substring(0, MAX) + '\n\n...(内容过长已截断)...';
+      wasTruncated = true;
+    }
+    sections.push(`### 文件 #${file.id} - ${file.original_name}\n\n${md}`);
+    truncated.push({ id: file.id, name: file.original_name, truncated: wasTruncated });
+  }
+  if (sections.length === 0) return null;
+  return {
+    role: 'system',
+    content: `以下是用户在本次会话中附带的上传文件，已由 markitdown 转换为 Markdown，请结合这些文档内容回复用户、生成接口或修改接口。当用户要求"根据 X 文件创建/修改接口"时，你必须参照下面文档内容。\n\n${sections.join('\n\n---\n\n')}`
+  };
+}
+
+async function chat(messages, fileIds = []) {
   const MAX_ITERATIONS = 5;
-  
+
   const systemPrompt = {
     role: 'system',
     content: `你是一个API接口管理助手，帮助用户管理测试用的Mock接口。
@@ -233,6 +292,8 @@ async function chat(messages) {
 - createConfig(params): 创建新接口
 - updateConfig(params): 更新接口
 - deleteConfig(id): 删除接口
+- listFiles: 列出已上传的所有文件
+- getFile(id): 查看某个上传文件的内容
 
 接口配置参数说明：
 - name: 接口名称（必填）
@@ -243,73 +304,80 @@ async function chat(messages) {
 - content_type: 响应内容类型，默认 application/json; charset=utf-8
 - error_format: 错误响应格式，必须是有效的JSON字符串，支持占位符：{{code}} {{message}} {{field}}（必填）
 - description: 接口备注说明（可选）
+- source_file_id: 挂载的上传文件ID（可选），表示该接口是从哪个上传文件衍生而来的
 - params: 入参定义数组（可选）
 - headers: 请求头校验数组（可选）
 
 注意：
 - 创建或更新接口时，response_body 和 error_format 必须是有效的JSON字符串
 - path 必须以 / 开头
+- 如果用户基于某个文件创建接口，建议在 description 里说明该接口来自哪个文件，并把 source_file_id 设为对应文件ID
 - 回复时要用中文，保持友好自然`
   };
 
-  let allMessages = [systemPrompt, ...messages];
+  const fileContext = buildFileContext(fileIds);
+  let allMessages = [systemPrompt];
+  if (fileContext) allMessages.push(fileContext);
+  allMessages.push(...messages);
   const toolCalls = [];
-  
+
   for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
     const response = await callLLM(allMessages);
     const choice = response.choices?.[0];
     if (!choice) throw new Error('LLM响应格式错误');
 
     const message = choice.message;
-    
+
     if (message.tool_calls && message.tool_calls.length > 0) {
-      console.log('[agent] 收到工具调用:', message.tool_calls.map(tc => ({ 
-        toolCallId: tc.id, 
-        functionName: tc.function.name 
+      console.log('[agent] 收到工具调用:', message.tool_calls.map(tc => ({
+        toolCallId: tc.id,
+        functionName: tc.function.name
       })));
-      
+
       allMessages.push(message);
-      
+
       for (const toolCall of message.tool_calls) {
         const args = JSON.parse(toolCall.function.arguments);
         const toolResult = await callTool(toolCall.function.name, args);
-        
+
         toolCalls.push({
           name: toolCall.function.name,
           args,
           result: toolResult
         });
-        
+
         const toolMessage = {
           role: 'tool',
           content: JSON.stringify(toolResult),
           name: toolCall.function.name,
           tool_call_id: toolCall.id
         };
-        
-        console.log('[agent] 发送工具结果:', { 
-          toolCallId: toolCall.id, 
-          functionName: toolCall.function.name 
+
+        console.log('[agent] 发送工具结果:', {
+          toolCallId: toolCall.id,
+          functionName: toolCall.function.name
         });
-        
+
         allMessages.push(toolMessage);
       }
     } else {
       return {
         type: 'text',
         content: message.content || '操作完成',
-        toolCalls
+        toolCalls,
+        fileIds
       };
     }
   }
-  
+
   const finalResponse = await callLLM(allMessages);
   const finalChoice = finalResponse.choices?.[0];
-  
+
   return {
     type: 'text',
     content: finalChoice?.message?.content || '操作完成',
-    toolCalls
+    toolCalls,
+    fileIds
   };
 }
 
