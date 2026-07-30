@@ -35,8 +35,24 @@ router.get('/:id', (req, res) => {
 router.get('/:id/preview', (req, res) => {
   const file = fileService.getFile(req.params.id);
   if (!file) return res.status(404).json({ ok: false, message: '文件不存在' });
-  const md = fileService.readMd(file.md_path);
-  res.json({ ok: true, data: { id: file.id, name: file.name, original_name: file.original_name, content: md, size: md.length } });
+  // 文本类文件直接返回原文；其余返回已转换的 Markdown
+  const direct = fileService.canDirectPreview(file);
+  const body = direct ? fileService.readOriginal(file) : fileService.readMd(file.md_path);
+  const ext = fileService.getExt(file.original_name) || fileService.getExt(file.name);
+  res.json({
+    ok: true,
+    data: {
+      id: file.id,
+      name: file.name,
+      original_name: file.original_name,
+      ext,
+      // markdown | text | html
+      preview_kind: direct ? (ext === 'html' || ext === 'htm' ? 'html' : (ext === 'md' || ext === 'markdown' ? 'markdown' : 'text')) : 'markdown',
+      preview_content: body,
+      md_content: direct ? body : fileService.readMd(file.md_path),
+      size: body.length
+    }
+  });
 });
 
 router.get('/:id/download', (req, res) => {

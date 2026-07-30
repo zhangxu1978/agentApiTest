@@ -264,6 +264,123 @@
       font-size: 11px;
     }
     .file-chip.attached .chip-loading { display: none; }
+    .file-chip .chip-preview {
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1;
+      padding: 0 2px;
+    }
+    .file-chip .chip-preview:hover { color: var(--primary); }
+    .file-chip:not(.attached) .chip-preview { display: none; }
+
+    /* 预览弹窗 */
+    .modal.hidden { display: none; }
+    .modal {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.55);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 1000;
+    }
+    .modal-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      width: min(860px, 92vw);
+      max-height: 84vh;
+      display: flex; flex-direction: column;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+    }
+    .modal-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex; justify-content: space-between; align-items: center;
+      gap: 8px;
+    }
+    .modal-header .modal-title {
+      font-weight: 600;
+      font-size: 14px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .modal-header .modal-actions { display: flex; gap: 6px; flex-shrink: 0; }
+    .modal-body {
+      padding: 14px 16px;
+      overflow: auto;
+      flex: 1;
+      min-height: 0;
+    }
+    .preview-meta {
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 10px;
+    }
+    .preview-md-body {
+      background: var(--code-bg);
+      padding: 14px;
+      border-radius: 6px;
+      font-family: ui-monospace, monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-x: auto;
+    }
+    .preview-md-rendered { line-height: 1.7; }
+    .preview-md-rendered h1,
+    .preview-md-rendered h2,
+    .preview-md-rendered h3 { margin: 14px 0 8px; }
+    .preview-md-rendered h1 { font-size: 20px; }
+    .preview-md-rendered h2 { font-size: 17px; }
+    .preview-md-rendered h3 { font-size: 15px; }
+    .preview-md-rendered p { margin: 8px 0; }
+    .preview-md-rendered code {
+      background: var(--code-bg);
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-family: ui-monospace, monospace;
+      font-size: 12px;
+    }
+    .preview-md-rendered pre {
+      background: var(--code-bg);
+      padding: 10px;
+      border-radius: 6px;
+      overflow: auto;
+    }
+    .preview-md-rendered ul,
+    .preview-md-rendered ol { padding-left: 24px; }
+    .preview-md-rendered blockquote {
+      border-left: 3px solid var(--border);
+      padding: 4px 12px;
+      color: var(--muted);
+      margin: 8px 0;
+    }
+    .preview-md-rendered table {
+      border-collapse: collapse;
+      margin: 8px 0;
+    }
+    .preview-md-rendered table th,
+    .preview-md-rendered table td {
+      border: 1px solid var(--border);
+      padding: 4px 8px;
+    }
+    .preview-html-frame {
+      width: 100%;
+      min-height: 60vh;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #fff;
+    }
+    .preview-text-body {
+      background: var(--code-bg);
+      padding: 14px;
+      border-radius: 6px;
+      font-family: ui-monospace, monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-x: auto;
+    }
 
     .upload-progress {
       display: none;
@@ -328,6 +445,24 @@
 
   <div id="toast" class="toast hidden"></div>
 
+  <!-- 预览弹窗 -->
+  <div id="preview-modal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <div class="modal-header">
+        <span class="modal-title" id="preview-title">预览</span>
+        <div class="modal-actions">
+          <button id="btn-preview-rendered" class="btn-mini" title="切换渲染/源码视图">源码</button>
+          <a id="btn-preview-download" class="btn-mini" target="_blank" rel="noopener">下载</a>
+          <button id="btn-preview-close" class="btn-mini">✕</button>
+        </div>
+      </div>
+      <div class="modal-body" id="preview-body">
+        <div class="preview-meta" id="preview-meta"></div>
+        <div id="preview-content"></div>
+      </div>
+    </div>
+  </div>
+
   <script>
     const API = {
       chat: (messages, fileIds) => fetch('/agent/chat', {
@@ -388,6 +523,14 @@
         const loading = document.createElement('span');
         loading.className = 'chip-loading';
         loading.textContent = f.id ? '' : '⏳ 上传中';
+        const preview = document.createElement('span');
+        preview.className = 'chip-preview';
+        preview.textContent = '👁';
+        preview.title = f.id ? '预览' : '';
+        preview.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (f.id) openPreview(f.id, f.name);
+        });
         const x = document.createElement('span');
         x.className = 'chip-remove';
         x.textContent = '×';
@@ -398,6 +541,7 @@
         });
         chip.appendChild(name);
         chip.appendChild(loading);
+        chip.appendChild(preview);
         chip.appendChild(x);
         wrap.appendChild(chip);
       });
@@ -407,6 +551,167 @@
       const p = $('upload-progress');
       p.textContent = text;
       p.classList.toggle('active', active);
+    }
+
+    // === 预览弹窗 ===
+    let previewState = null; // { id, name, kind, content, renderedMode }
+
+    function escapeHtml(text) {
+      if (text == null) return '';
+      return String(text)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    }
+
+    // 极简 Markdown 渲染：仅覆盖常规标题/段落/列表/引用/代码/链接/表格/粗斜体，足以用来预览转换后的内容
+    function renderMarkdown(md) {
+      if (md == null) return '';
+      const lines = String(md).replace(/\r\n?/g, '\n').split('\n');
+      const out = [];
+      let inCode = false, codeLang = '', codeBuf = [];
+      let inList = null; // 'ul' | 'ol' | null
+      let paraBuf = [];
+      let inTable = false;
+      function flushPara() {
+        if (paraBuf.length) {
+          out.push(`<p>${inlineRender(paraBuf.join(' '))}</p>`);
+          paraBuf = [];
+        }
+      }
+      function flushList() {
+        if (inList) { out.push(`</${inList}>`); inList = null; }
+      }
+      function flushTable() {
+        if (inTable) { out.push('</tbody></table>'); inTable = false; }
+      }
+      function inlineRender(s) {
+        let r = escapeHtml(s);
+        r = r.replace(/`([^`]+)`/g, (_, c) => `<code>${c}</code>`);
+        r = r.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, alt, url) => `<img alt="${alt}" src="${url}">`);
+        r = r.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, t, url) => `<a href="${url}" target="_blank" rel="noopener">${t}</a>`);
+        r = r.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+        r = r.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+        r = r.replace(/(^|[^*])\*([^*]+)\*/g, '$1<em>$2</em>');
+        r = r.replace(/(^|[^_])_([^_]+)_/g, '$1<em>$2</em>');
+        return r;
+      }
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (inCode) {
+          if (/^```/.test(line)) {
+            out.push(`<pre><code${codeLang ? ` class="lang-${codeLang}"` : ''}>${escapeHtml(codeBuf.join('\n'))}</code></pre>`);
+            codeBuf = []; codeLang = ''; inCode = false;
+          } else codeBuf.push(line);
+          continue;
+        }
+        const fence = line.match(/^```(\w*)\s*$/);
+        if (fence) { flushPara(); flushList(); flushTable(); inCode = true; codeLang = fence[1] || ''; continue; }
+        if (/^\s*$/.test(line)) { flushPara(); flushList(); flushTable(); continue; }
+        let m;
+        if ((m = line.match(/^(#{1,6})\s+(.+)$/))) {
+          flushPara(); flushList(); flushTable();
+          out.push(`<h${m[1].length}>${inlineRender(m[2])}</h${m[1].length}>`);
+          continue;
+        }
+        if ((m = line.match(/^>\s?(.*)$/))) {
+          flushPara(); flushList(); flushTable();
+          out.push(`<blockquote>${inlineRender(m[1])}</blockquote>`);
+          continue;
+        }
+        if ((m = line.match(/^[-*]\s+(.+)$/))) {
+          flushPara(); flushTable();
+          if (inList !== 'ul') { flushList(); inList = 'ul'; out.push('<ul>'); }
+          out.push(`<li>${inlineRender(m[1])}</li>`);
+          continue;
+        }
+        if ((m = line.match(/^\d+\.\s+(.+)$/))) {
+          flushPara(); flushTable();
+          if (inList !== 'ol') { flushList(); inList = 'ol'; out.push('<ol>'); }
+          out.push(`<li>${inlineRender(m[1])}</li>`);
+          continue;
+        }
+        // 简易表格：以 |...| 形式且下一行为分隔行
+        if (line.indexOf('|') >= 0 && i + 1 < lines.length && /^\s*\|?[\s:|-]+\|?\s*$/.test(lines[i + 1])) {
+          flushPara(); flushList();
+          const headerCells = line.trim().replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+          i++; // skip separator
+          const dataLines = [];
+          while (i + 1 < lines.length && lines[i + 1].indexOf('|') >= 0 && !/^\s*$/.test(lines[i + 1])) {
+            dataLines.push(lines[++i]);
+          }
+          out.push('<table><thead><tr>' + headerCells.map(c => `<th>${inlineRender(c)}</th>`).join('') + '</tr></thead><tbody>');
+          for (const dl of dataLines) {
+            const cs = dl.trim().replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+            out.push('<tr>' + cs.map(c => `<td>${inlineRender(c)}</td>`).join('') + '</tr>');
+          }
+          out.push('</tbody></table>');
+          continue;
+        }
+        // 普通段落
+        flushList(); flushTable();
+        paraBuf.push(line);
+      }
+      flushPara(); flushList(); flushTable();
+      if (inCode) out.push(`<pre><code>${escapeHtml(codeBuf.join('\n'))}</code></pre>`);
+      return out.join('\n');
+    }
+
+    function renderPreviewContent() {
+      const wrap = $('preview-content');
+      const meta = $('preview-meta');
+      if (!previewState) { wrap.innerHTML = ''; meta.textContent = ''; return; }
+      const { kind, content, name, size } = previewState;
+      const sizeLabel = (size || 0).toLocaleString();
+      const kindLabel = kind === 'html' ? 'HTML 原文' : (kind === 'text' ? '文本原文' : (kind === 'markdown' ? 'Markdown 渲染' : ''));
+      meta.textContent = `${kindLabel} · ${sizeLabel} 字符 · ${name}`;
+      if (kind === 'markdown') {
+        if (previewState.renderedMode === 'source') {
+          wrap.innerHTML = `<div class="preview-md-body">${escapeHtml(content)}</div>`;
+          $('btn-preview-rendered').textContent = '渲染';
+        } else {
+          wrap.innerHTML = `<div class="preview-md-rendered">${renderMarkdown(content)}</div>`;
+          $('btn-preview-rendered').textContent = '源码';
+        }
+      } else if (kind === 'html') {
+        wrap.innerHTML = `<iframe class="preview-html-frame" sandbox="" srcdoc="${escapeHtml(content).replace(/\"/g, '&quot;')}"></iframe>`;
+      } else {
+        wrap.innerHTML = `<div class="preview-text-body">${escapeHtml(content)}</div>`;
+      }
+    }
+
+    async function openPreview(id, name) {
+      previewState = { id, name, kind: 'text', content: '', size: 0, renderedMode: 'rendered' };
+      $('preview-title').textContent = name || '预览';
+      $('preview-content').innerHTML = '<div style="color:var(--muted);font-size:13px;">加载中...</div>';
+      $('preview-meta').textContent = '';
+      $('btn-preview-download').href = `/files/${id}/download`;
+      // 源码/渲染切换按钮仅对 markdown 可见
+      const toggle = $('btn-preview-rendered');
+      toggle.style.display = 'none';
+      $('preview-modal').classList.remove('hidden');
+      try {
+        const res = await fetch(`/files/${id}/preview`).then(r => r.json());
+        if (!res.ok) throw new Error(res.message || '加载失败');
+        const d = res.data || {};
+        previewState.kind = d.preview_kind || 'markdown';
+        previewState.content = d.preview_content || d.md_content || d.content || '';
+        previewState.size = d.size || previewState.content.length;
+        // 对 markdown 类展示源码/渲染切换
+        if (previewState.kind === 'markdown') {
+          toggle.style.display = '';
+          previewState.renderedMode = 'rendered';
+        }
+        renderPreviewContent();
+      } catch (e) {
+        $('preview-content').innerHTML = `<div style="color:var(--danger);font-size:13px;">加载失败: ${escapeHtml(e.message)}</div>`;
+      }
+    }
+
+    function closePreview() {
+      $('preview-modal').classList.add('hidden');
+      // 清空 iframe 释放 sandbox 内容
+      $('preview-content').innerHTML = '';
+      previewState = null;
     }
 
     async function handleFiles(fileList) {
@@ -635,6 +940,22 @@
 
       $('btn-send').addEventListener('click', sendMessage);
       $('btn-reload-config').addEventListener('click', reloadConfig);
+
+      // 预览弹窗交互
+      $('btn-preview-close').addEventListener('click', closePreview);
+      $('preview-modal').addEventListener('click', (e) => {
+        if (e.target.id === 'preview-modal') closePreview();
+      });
+      $('btn-preview-rendered').addEventListener('click', () => {
+        if (!previewState || previewState.kind !== 'markdown') return;
+        previewState.renderedMode = previewState.renderedMode === 'rendered' ? 'source' : 'rendered';
+        renderPreviewContent();
+      });
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !$('preview-modal').classList.contains('hidden')) {
+          closePreview();
+        }
+      });
       $('btn-upload').addEventListener('click', () => $('file-input').click());
       $('file-input').addEventListener('change', async (e) => {
         await handleFiles(e.target.files);

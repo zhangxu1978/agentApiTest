@@ -515,10 +515,14 @@
       }
 
       state.linkedConfigs = linkedRes.ok ? linkedRes.data : [];
-      const content = previewRes.data?.content || '(空)';
+      const pd = previewRes.data || {};
+      const content = pd.preview_content || pd.content || pd.md_content || '(空)';
+      const kindLabel = pd.preview_kind === 'html' ? 'HTML 原文'
+        : pd.preview_kind === 'text' ? '文本原文'
+        : 'Markdown';
       $('preview-body').innerHTML = `
         <div style="margin-bottom:12px;color:var(--muted);font-size:12px;">
-          Markdown 预览（${content.length} 字符） · 已挂载到 ${state.linkedConfigs.length} 个接口
+          ${kindLabel} 预览（${content.length} 字符） · 已挂载到 ${state.linkedConfigs.length} 个接口
         </div>
         <pre style="margin:0;background:var(--code-bg);padding:12px;border-radius:6px;overflow:auto;">${escapeHtml(content)}</pre>
         <div id="linked-configs-section" style="margin-top:16px;">

@@ -160,6 +160,22 @@ function listFiles() {
   return rows.map(rowToFile);
 }
 
+// 文本类文件（可直接预览原文，无需转 md）：txt / md / html / htm / json / csv
+const DIRECT_PREVIEW_EXTS = new Set(['txt', 'md', 'markdown', 'html', 'htm', 'json', 'csv', 'log', 'xml', 'yaml', 'yml']);
+function getExt(name) {
+  if (!name) return '';
+  const m = String(name).toLowerCase().match(/\.([^.]+)$/);
+  return m ? m[1] : '';
+}
+function canDirectPreview(file) {
+  if (!file) return false;
+  return DIRECT_PREVIEW_EXTS.has(getExt(file.original_name) || getExt(file.name));
+}
+function readOriginal(file) {
+  if (!file || !file.original_path) return '';
+  if (!fs.existsSync(file.original_path)) return '';
+  return fs.readFileSync(file.original_path, 'utf-8');
+}
 function readMd(mdPath) {
   if (!fs.existsSync(mdPath)) return '';
   return fs.readFileSync(mdPath, 'utf-8');
@@ -212,6 +228,9 @@ module.exports = {
   getFile,
   listFiles,
   readMd,
+  readOriginal,
+  canDirectPreview,
+  getExt,
   deleteFile,
   mountFileToConfig,
   unmountFileFromConfig,
