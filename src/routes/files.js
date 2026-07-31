@@ -37,8 +37,13 @@ router.get('/:id/preview', (req, res) => {
   if (!file) return res.status(404).json({ ok: false, message: '文件不存在' });
   // 文本类文件直接返回原文；其余返回已转换的 Markdown
   const direct = fileService.canDirectPreview(file);
+  const isImage = fileService.isImageFile(file);
   const body = direct ? fileService.readOriginal(file) : fileService.readMd(file.md_path);
   const ext = fileService.getExt(file.original_name) || fileService.getExt(file.name);
+  let previewKind;
+  if (isImage) previewKind = 'image';
+  else if (direct) previewKind = (ext === 'html' || ext === 'htm') ? 'html' : ((ext === 'md' || ext === 'markdown') ? 'markdown' : 'text');
+  else previewKind = 'markdown';
   res.json({
     ok: true,
     data: {
@@ -46,10 +51,12 @@ router.get('/:id/preview', (req, res) => {
       name: file.name,
       original_name: file.original_name,
       ext,
-      // markdown | text | html
-      preview_kind: direct ? (ext === 'html' || ext === 'htm' ? 'html' : (ext === 'md' || ext === 'markdown' ? 'markdown' : 'text')) : 'markdown',
+      // markdown | text | html | image
+      preview_kind: previewKind,
       preview_content: body,
-      md_content: direct ? body : fileService.readMd(file.md_path),
+      // 图片文件额外附带原始下载 URL，方便预览弹窗展示图片本身
+      preview_url: isImage ? `/files/${file.id}/download` : undefined,
+      md_content: fileService.readMd(file.md_path),
       size: body.length
     }
   });

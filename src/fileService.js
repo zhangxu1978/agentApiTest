@@ -2,6 +2,8 @@
 
 const path = require('path');
 const fs = require('fs');
+const http = require('http');
+const https = require('https');
 const { spawn } = require('child_process');
 const db = require('./db');
 
@@ -14,6 +16,13 @@ for (const dir of [UPLOAD_DIR, MD_DIR]) {
     fs.mkdirSync(dir, { recursive: true });
   }
 }
+
+// 图片扩展名（无需走 markitdown，改为通过 minimax 多模态生成 md）
+const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg']);
+
+// 上传代理地址：由用户提供，本服务负责把图片转发过去获取公网 URL（供 minimax 多模态消费）
+// 可通过环境变量 FILE_IMAGE_UPLOAD_URL 覆盖，默认 http://127.0.0.1:3091/upload
+const FILE_IMAGE_UPLOAD_URL = process.env.FILE_IMAGE_UPLOAD_URL || 'http://127.0.0.1:3091/upload';
 
 function safeBaseName(name) {
   const ext = path.extname(name);
@@ -87,6 +96,188 @@ function runMarkitdown(inputPath, outputPath) {
   });
 }
 
+function isImageExt(ext) {
+  return IMAGE_EXTS.has(String(ext || '').toLowerCase());
+}
+
+// 通用 HTTP 请求（multipart 上传或 JSON 调用）
+function postMultipart(targetUrl, filePath, originalName) {
+  return new Promise((resolve, reject) => {
+    let url;
+    try { url = new URL(targetUrl); } catch (e) { return reject(new Error('FILE_IMAGE_UPLOAD_URL 配置非法: ' + e.message)); }
+    const boundary = '----fileService' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    const filename = originalName || path.basename(filePath);
+    const fileData = fs.readFileSync(filePath);
+    const head = Buffer.from(
+      `--${boundary}\r\n` +
+      `Content-Disposition: form-data; name="file"; filename="${filename}"\r\n` +
+      `Content-Type: application/octet-stream\r\n\r\n`,
+      'utf-8'
+    );
+    const tail = Buffer.from(`\r\n--${boundary}--\r\n`, 'utf-8');
+    const body = Buffer.concat([head, fileData, tail]);
+    const protocol = url.protocol === 'https:' ? https : http;
+    const req = protocol.request({
+      hostname: url.hostname,
+      port: url.port || (url.protocol === 'https:' ? 443 : 80),
+      path: url.pathname + url.search,
+      method: 'POST',
+      protocol: url.protocol,
+      headers: {
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+        'Content-Length': body.length
+      }
+    }, (res) => {
+      let raw = '';
+      res.on('data', (c) => { raw += c; });
+      res.on('end', () => {
+        let parsed = raw;
+        try { parsed = JSON.parse(raw); } catch (e) { /* keep raw */ }
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          resolve(parsed);
+        } else {
+          reject(new Error(`图片上传代理失败 (HTTP ${res.statusCode}): ${typeof parsed === 'string' ? parsed.slice(0, 500) : JSON.stringify(parsed).slice(0, 500)}`));
+        }
+      });
+    });
+    req.on('error', reject);
+    req.setTimeout(60000, () => req.destroy(new Error('图片上传代理超时')));
+    req.write(body);
+    req.end();
+  });
+}
+
+function pickImageUrl(obj) {
+  if (!obj) return null;
+  if (typeof obj === 'string') return obj;
+  // 常见返回字段
+  const candidates = ['url', 'image_url', 'imageUrl', 'src', 'link', 'data.url'];
+  for (const key of candidates) {
+    if (key.indexOf('.') >= 0) {
+      const parts = key.split('.');
+      let cur = obj;
+      for (const p of parts) cur = cur && cur[p];
+      if (typeof cur === 'string') return cur;
+    } else if (typeof obj[key] === 'string') {
+      return obj[key];
+    }
+  }
+  // 兜底：在对象/数组里递归找一个 http(s) 字符串
+  const seen = new Set();
+  function walk(v) {
+    if (!v || seen.has(v)) return null;
+    seen.add(v);
+    if (typeof v === 'string') return /^https?:\/\//i.test(v) ? v : null;
+    if (Array.isArray(v)) { for (const it of v) { const r = walk(it); if (r) return r; } }
+    if (typeof v === 'object') { for (const k of Object.keys(v)) { const r = walk(v[k]); if (r) return r; } }
+    return null;
+  }
+  return walk(obj);
+}
+
+async function uploadImageToProxy(localPath, originalName) {
+  // 兼容两种返回：纯字符串 URL 或 JSON 对象
+  const result = await postMultipart(FILE_IMAGE_UPLOAD_URL, localPath, originalName);
+  const url = pickImageUrl(result);
+  if (!url) {
+    throw new Error(`图片上传成功但未在响应中找到 URL: ${typeof result === 'string' ? result.slice(0, 300) : JSON.stringify(result).slice(0, 300)}`);
+  }
+  return url;
+}
+
+function postJson(targetUrl, body, headers) {
+  return new Promise((resolve, reject) => {
+    let url;
+    try { url = new URL(targetUrl); } catch (e) { return reject(new Error('baseUrl 非法: ' + e.message)); }
+    const data = Buffer.from(JSON.stringify(body), 'utf-8');
+    const protocol = url.protocol === 'https:' ? https : http;
+    const req = protocol.request({
+      hostname: url.hostname,
+      port: url.port || (url.protocol === 'https:' ? 443 : 80),
+      path: url.pathname + url.search,
+      method: 'POST',
+      protocol: url.protocol,
+      headers: Object.assign({
+        'Content-Type': 'application/json',
+        'Content-Length': data.length
+      }, headers || {})
+    }, (res) => {
+      let raw = '';
+      res.on('data', (c) => { raw += c; });
+      res.on('end', () => {
+        let parsed = raw;
+        try { parsed = JSON.parse(raw); } catch (e) { /* keep raw */ }
+        if (res.statusCode >= 200 && res.statusCode < 300) resolve(parsed);
+        else reject(new Error(`LLM 调用失败 (HTTP ${res.statusCode}): ${typeof parsed === 'string' ? parsed.slice(0, 500) : JSON.stringify(parsed).slice(0, 500)}`));
+      });
+    });
+    req.on('error', reject);
+    req.setTimeout(120000, () => req.destroy(new Error('LLM 调用超时')));
+    req.write(data);
+    req.end();
+  });
+}
+
+// 通过 minimax 多模态分析图片，并让模型把图片内容整理成 Markdown 文本
+async function analyzeImageWithMiniMax(imageUrl, originalName) {
+  const configPath = path.join(__dirname, '..', 'config.json');
+  let cfg = null;
+  try {
+    cfg = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+  } catch (e) {
+    throw new Error('读取 config.json 失败: ' + e.message);
+  }
+  const agent = (cfg && cfg.agent) || {};
+  const apiKey = agent.apiKey;
+  const model = agent.model || 'MiniMax-M3';
+  const baseUrl = agent.baseUrl || 'https://api.minimaxi.com/v1';
+  if (!apiKey) {
+    throw new Error('请先在 config.json 中配置 minimax API Key');
+  }
+  const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
+  const prompt = `请仔细观察下面这张图片（文件名：${originalName || 'image'}），识别其中所有可见的文字、表格、字段名及其语义关系，然后输出一段结构清晰的 **Markdown** 文档，要求如下：
+1. 尽量保留原始层级（一级/二级标题、列表、表格、代码块等），便于后续作为接口文档解析。
+2. 如果图片中包含接口文档（字段说明、请求/响应示例、错误码等），按字段列出参数表（名称、类型、是否必填、说明）。
+3. 如果图片中存在表格，请用 Markdown 表格呈现。
+4. 如果没有可识别的文字，仅输出：“（图片中未检测到文本内容：<简短的图像描述>）”。
+5. 不要输出任何解释、寒暄或代码围栏之外的内容；只输出 Markdown 本身。`;
+  const body = {
+    model,
+    temperature: 0.2,
+    stream: false,
+    messages: [
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: prompt },
+          {
+            type: 'image_url',
+            image_url: {
+              url: imageUrl,
+              detail: 'default'
+            }
+          }
+        ]
+      }
+    ]
+  };
+  const res = await postJson(url, body, { Authorization: `Bearer ${apiKey}` });
+  const content = res && res.choices && res.choices[0] && res.choices[0].message && res.choices[0].message.content;
+  if (typeof content !== 'string' || !content.trim()) {
+    throw new Error('minimax 多模态响应为空或格式异常: ' + JSON.stringify(res).slice(0, 500));
+  }
+  return content;
+}
+
+// 图片流程：上传代理 → 拿 URL → minimax 多模态 → 写 markdown 文件
+async function generateMdForImage(localPath, originalName, mdPath) {
+  const imageUrl = await uploadImageToProxy(localPath, originalName);
+  const md = await analyzeImageWithMiniMax(imageUrl, originalName);
+  const header = `> 来源图片：\`${originalName}\`\n> 图片URL：\`${imageUrl}\`\n\n`;
+  fs.writeFileSync(mdPath, header + md, 'utf-8');
+  return { imageUrl, md };
+}
+
 function rowToFile(row) {
   if (!row) return null;
   let linkCount = 0;
@@ -119,7 +310,13 @@ async function ingestFromPath(originalPath, originalName, source = 'upload', des
   fs.renameSync(originalPath, keptOriginal);
 
   const mdPath = path.join(MD_DIR, `${stem}.md`);
-  await runMarkitdown(keptOriginal, mdPath);
+
+  if (isImageExt(targetExt)) {
+    // 图片：不再走 markitdown，而是转发到 FILE_IMAGE_UPLOAD_URL 拿到 url，再用 minimax 多模态生成 md
+    await generateMdForImage(keptOriginal, originalName, mdPath);
+  } else {
+    await runMarkitdown(keptOriginal, mdPath);
+  }
 
   const info = db.prepare(`
     INSERT INTO uploaded_files
@@ -170,6 +367,10 @@ function getExt(name) {
 function canDirectPreview(file) {
   if (!file) return false;
   return DIRECT_PREVIEW_EXTS.has(getExt(file.original_name) || getExt(file.name));
+}
+function isImageFile(file) {
+  if (!file) return false;
+  return isImageExt(getExt(file.original_name) || getExt(file.name));
 }
 function readOriginal(file) {
   if (!file || !file.original_path) return '';
@@ -230,7 +431,11 @@ module.exports = {
   readMd,
   readOriginal,
   canDirectPreview,
+  isImageFile,
   getExt,
+  uploadImageToProxy,
+  analyzeImageWithMiniMax,
+  generateMdForImage,
   deleteFile,
   mountFileToConfig,
   unmountFileFromConfig,
