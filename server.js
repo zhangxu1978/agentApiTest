@@ -7,6 +7,7 @@ require('./src/db'); // init DB
 const adminRouter = require('./src/routes/admin');
 const agentRouter = require('./src/routes/agent');
 const filesRouter = require('./src/routes/files');
+const convertRouter = require('./src/routes/convert');
 const mockRouter = require('./src/routes/mock');
 
 const app = express();
@@ -26,6 +27,9 @@ app.use('/agent', agentRouter);
 
 // Files API
 app.use('/files', filesRouter);
+
+// Public conversion API (upload file → return markdown)
+app.use('/api/convert', convertRouter);
 
 // Catch-all mock dispatcher (must be last)
 app.use(mockRouter);

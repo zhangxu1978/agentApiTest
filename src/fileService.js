@@ -336,6 +336,64 @@ async function ingestFromPath(originalPath, originalName, source = 'upload', des
   return getFile(info.lastInsertRowid);
 }
 
+// 文本文档直接读取返回，不走 markitdown（同步）
+function convertTextBuffer(buffer, originalName) {
+  const text = Buffer.isBuffer(buffer) ? buffer.toString('utf-8') : String(buffer || '');
+  return Promise.resolve({ markdown: text, converted: false, source: 'text' });
+}
+
+// docx/pdf/office：通过 markitdown 转 md
+async function convertDocumentBuffer(buffer, originalName) {
+  const { stem, ext } = safeBaseName(originalName);
+  const targetExt = ext || 'bin';
+  const tmpInput = path.join(UPLOAD_DIR, `_tmp_conv_${stem}.${targetExt}`);
+  const tmpOutput = path.join(MD_DIR, `${stem}.md`);
+  fs.writeFileSync(tmpInput, buffer);
+  try {
+    await runMarkitdown(tmpInput, tmpOutput);
+    const md = fs.readFileSync(tmpOutput, 'utf-8');
+    return { markdown: md, converted: true, source: 'markitdown' };
+  } finally {
+    try { fs.unlinkSync(tmpInput); } catch (e) {}
+    try { fs.unlinkSync(tmpOutput); } catch (e) {}
+  }
+}
+
+// 图片：上传代理 → minimax 多模态 → md
+async function convertImageBuffer(buffer, originalName) {
+  const { stem, ext } = safeBaseName(originalName);
+  const targetExt = ext || 'png';
+  const tmpInput = path.join(UPLOAD_DIR, `_tmp_conv_${stem}.${targetExt}`);
+  const tmpOutput = path.join(MD_DIR, `${stem}.md`);
+  fs.writeFileSync(tmpInput, buffer);
+  try {
+    const result = await generateMdForImage(tmpInput, originalName, tmpOutput);
+    return { markdown: result.md, converted: true, source: 'minimax-multimodal', imageUrl: result.imageUrl };
+  } finally {
+    try { fs.unlinkSync(tmpInput); } catch (e) {}
+    try { fs.unlinkSync(tmpOutput); } catch (e) {}
+  }
+}
+
+// 对外统一入口：按扩展名分发转换逻辑，不落库
+async function convertBuffer(buffer, originalName) {
+  if (!Buffer.isBuffer(buffer)) {
+    throw Object.assign(new Error('buffer 必须是 Buffer'), { statusCode: 400 });
+  }
+  if (!originalName || !String(originalName).trim()) {
+    throw Object.assign(new Error('缺少文件名'), { statusCode: 400 });
+  }
+  const ext = getExt(originalName);
+  if (DIRECT_PREVIEW_EXTS.has(ext)) {
+    return convertTextBuffer(buffer, originalName);
+  }
+  if (isImageExt(ext)) {
+    return convertImageBuffer(buffer, originalName);
+  }
+  // docx/pdf/pptx/xlsx 及其它未识别格式 → 一律走 markitdown
+  return convertDocumentBuffer(buffer, originalName);
+}
+
 async function ingestTextContent(textContent, fileName = 'pasted.txt', description = '') {
   const safeName = fileName.endsWith('.txt') ? fileName : `${fileName}.txt`;
   const tmpPath = path.join(UPLOAD_DIR, `_tmp_${Date.now()}_${safeName}`);
@@ -426,6 +484,7 @@ function listConfigsForFile(fileId) {
 module.exports = {
   ingestFromPath,
   ingestTextContent,
+  convertBuffer,
   getFile,
   listFiles,
   readMd,
