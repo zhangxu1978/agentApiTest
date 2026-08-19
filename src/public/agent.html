@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="chinese">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -399,13 +399,7 @@
         <span class="logo">🤖</span>
         <span class="title">Agent 接口助手</span>
       </div>
-      <select id="theme-select">
-        <option value="dark">🌙 深蓝</option>
-        <option value="light">☀️ 浅色</option>
-        <option value="ocean">🌊 海洋</option>
-        <option value="warm">🔥 暖色</option>
-        <option value="forest">🌲 森林</option>
-      </select>
+      <span class="theme-label" aria-label="当前主题：国风">❖ 国风</span>
       <div class="nav-links">
         <a href="/">接口管理</a>
         <a href="/agent.html" class="active">🤖 AI 助手</a>
@@ -960,16 +954,6 @@
       $('file-input').addEventListener('change', async (e) => {
         await handleFiles(e.target.files);
         e.target.value = '';
-      });
-
-      const themeSelect = $('theme-select');
-      const savedTheme = localStorage.getItem('api-mock-theme') || 'dark';
-      document.documentElement.setAttribute('data-theme', savedTheme);
-      themeSelect.value = savedTheme;
-      themeSelect.addEventListener('change', (ev) => {
-        const theme = ev.target.value;
-        document.documentElement.setAttribute('data-theme', theme);
-        localStorage.setItem('api-mock-theme', theme);
       });
 
       checkConfig();
