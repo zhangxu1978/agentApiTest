@@ -21,6 +21,30 @@ router.post('/chat', async (req, res) => {
   }
 });
 
+// 外部 AI 接入入口：只用字符串消息，会话 ID 由外部控制
+router.post('/external-chat', async (req, res) => {
+  try {
+    const { conversationId, message, fileIds, title } = req.body || {};
+    if (typeof message !== 'string' || message.trim() === '') {
+      return res.status(400).json({ ok: false, message: 'message 必须是字符串' });
+    }
+
+    const validFileIds = Array.isArray(fileIds) ? fileIds.filter(x => x != null) : [];
+    // 不存在的 conversationId 视为"新对话"，由服务端创建并返回新的 id（外部以原 id 作为命名锚即可）
+    const response = await agentService.externalChat({
+      conversationId,
+      message,
+      fileIds: validFileIds,
+      title
+    });
+    res.json({ ok: true, data: response });
+  } catch (e) {
+    console.error('[agent] 外部聊天错误:', e);
+    const status = e.statusCode || 500;
+    res.status(status).json({ ok: false, message: e.message });
+  }
+});
+
 router.get('/config', (req, res) => {
   res.json({ ok: true, data: agentService.getConfig() });
 });

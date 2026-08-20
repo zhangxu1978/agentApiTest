@@ -14,29 +14,45 @@ function safeParse(text, fallback) {
   }
 }
 
-function createConversation({ title, fileIds = [] } = {}) {
+function createConversation({ title, fileIds = [], externalId = null } = {}) {
   const now = nowIso();
   const finalTitle = (title && String(title).trim()) || '新对话';
+  const extId = (externalId == null || String(externalId).trim() === '')
+    ? null
+    : String(externalId).trim();
   const info = db.prepare(`
-    INSERT INTO agent_conversations (title, file_ids, created_at, updated_at)
-    VALUES (?, ?, ?, ?)
-  `).run(finalTitle, JSON.stringify(Array.isArray(fileIds) ? fileIds : []), now, now);
+    INSERT INTO agent_conversations (title, file_ids, external_id, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(finalTitle, JSON.stringify(Array.isArray(fileIds) ? fileIds : []), extId, now, now);
   return getConversation(info.lastInsertRowid);
 }
 
 function getConversation(id) {
   const row = db.prepare('SELECT * FROM agent_conversations WHERE id = ?').get(id);
   if (!row) return null;
+  return rowToConversation(row);
+}
+
+function findByExternalId(externalId) {
+  if (externalId == null || String(externalId).trim() === '') return null;
+  const row = db.prepare('SELECT * FROM agent_conversations WHERE external_id = ?')
+    .get(String(externalId).trim());
+  if (!row) return null;
+  return rowToConversation(row);
+}
+
+function rowToConversation(row) {
   const messages = db.prepare(`
     SELECT role, content, tool_calls, seq
     FROM agent_messages
     WHERE conversation_id = ?
     ORDER BY seq ASC, id ASC
-  `).all(id);
+  `).all(row.id);
   return {
     id: row.id,
     title: row.title,
     fileIds: safeParse(row.file_ids, []),
+    externalId: row.external_id || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     messages: messages.map((m) => ({
@@ -49,7 +65,7 @@ function getConversation(id) {
 
 function listConversations() {
   const rows = db.prepare(`
-    SELECT c.id, c.title, c.file_ids, c.created_at, c.updated_at,
+    SELECT c.id, c.title, c.file_ids, c.external_id, c.created_at, c.updated_at,
            (SELECT COUNT(1) FROM agent_messages m WHERE m.conversation_id = c.id) AS message_count,
            (SELECT content FROM agent_messages m WHERE m.conversation_id = c.id AND m.role='user' ORDER BY seq ASC, id ASC LIMIT 1) AS preview
     FROM agent_conversations c
@@ -59,11 +75,18 @@ function listConversations() {
     id: r.id,
     title: r.title,
     fileIds: safeParse(r.file_ids, []),
+    externalId: r.external_id || null,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
     messageCount: Number(r.message_count) || 0,
     preview: r.preview || ''
   }));
+}
+
+function setExternalId(id, externalId) {
+  if (externalId == null || String(externalId).trim() === '') return;
+  db.prepare('UPDATE agent_conversations SET external_id = ?, updated_at = ? WHERE id = ?')
+    .run(String(externalId).trim(), nowIso(), id);
 }
 
 function renameConversation(id, title) {
@@ -111,6 +134,8 @@ function deleteConversation(id) {
 module.exports = {
   createConversation,
   getConversation,
+  findByExternalId,
+  setExternalId,
   listConversations,
   renameConversation,
   touchConversation,

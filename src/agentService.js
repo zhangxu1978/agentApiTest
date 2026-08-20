@@ -275,34 +275,53 @@ function buildFileContext(fileIds) {
   };
 }
 
-async function chat(messages, fileIds = [], options = {}) {
-  const MAX_ITERATIONS = 5;
-  const { conversationId: incomingConvId, title } = options;
-
+async function runConversation({ conversationId, fileIds, historyMessages, latestUserText, title, externalId = null }) {
   // 1. 解析 / 创建会话
   let conversation = null;
-  let conversationId = incomingConvId ? Number(incomingConvId) : null;
-  if (conversationId) {
-    conversation = conversationService.getConversation(conversationId);
-    if (!conversation) conversation = null;
-  }
-  const isFirstTurn = !conversation || (conversation.messages || []).length === 0;
-  if (!conversation) {
-    const firstUserText = (Array.isArray(messages) && messages.length)
-      ? (messages[messages.length - 1].content || '')
-      : '';
-    const inferredTitle = (title && String(title).trim())
-      || (firstUserText ? String(firstUserText).replace(/\s+/g, ' ').slice(0, 40) : '新对话');
-    conversation = conversationService.createConversation({ title: inferredTitle, fileIds });
-    conversationId = conversation.id;
-  }
-  conversationService.touchConversation(conversationId, Array.isArray(fileIds) ? fileIds : []);
+  let resolvedConvId = null;
 
-  // 2. 持久化最近一条用户消息（前端已发送完整上下文，但入库只保存用户原文，避免 token 爆炸）
-  const lastUser = [...messages].reverse().find((m) => m.role === 'user');
-  if (lastUser) {
-    conversationService.appendMessage(conversationId, { role: 'user', content: lastUser.content || '' });
+  if (externalId != null && String(externalId).trim() !== '') {
+    // 外部传入的字符串 ID 优先 → 按 external_id 查
+    conversation = conversationService.findByExternalId(externalId);
+    if (conversation) resolvedConvId = conversation.id;
   }
+  if (!conversation && conversationId != null && String(conversationId).trim() !== '') {
+    const numericId = Number(conversationId);
+    if (!Number.isNaN(numericId)) {
+      conversation = conversationService.getConversation(numericId);
+      if (conversation) {
+        resolvedConvId = conversation.id;
+        // 若调用方外部 ID 与内部 ID 共存（外部场景），同步外部 ID
+        if (externalId != null && String(externalId).trim() !== '' && !conversation.externalId) {
+          conversationService.setExternalId(conversation.id, externalId);
+        }
+      }
+    }
+  }
+
+  if (!conversation) {
+    const inferredTitle = (title && String(title).trim())
+      || (latestUserText ? String(latestUserText).replace(/\s+/g, ' ').slice(0, 40) : '新对话');
+    const createOpts = { title: inferredTitle, fileIds };
+    if (externalId != null && String(externalId).trim() !== '') {
+      createOpts.externalId = externalId;
+    }
+    conversation = conversationService.createConversation(createOpts);
+    resolvedConvId = conversation.id;
+  }
+  conversationService.touchConversation(resolvedConvId, Array.isArray(fileIds) ? fileIds : []);
+
+  // 2. 持久化最新一条用户原文（无论来自外部 AI 还是前端，仅存原文）
+  const userText = (latestUserText || '').toString();
+  if (userText) {
+    conversationService.appendMessage(resolvedConvId, { role: 'user', content: userText });
+  }
+
+  return _runAgentLoop(resolvedConvId, fileIds, historyMessages, userText);
+}
+
+async function _runAgentLoop(conversationId, fileIds, historyMessages, userText) {
+  const MAX_ITERATIONS = 5;
 
   const systemPrompt = {
     role: 'system',
@@ -343,13 +362,15 @@ async function chat(messages, fileIds = [], options = {}) {
   };
 
   const fileContext = buildFileContext(fileIds);
-  let allMessages = [systemPrompt];
-  if (fileContext) allMessages.push(fileContext);
-  allMessages.push(...messages);
+  const llmMessages = [systemPrompt];
+  if (fileContext) llmMessages.push(fileContext);
+  if (Array.isArray(historyMessages)) llmMessages.push(...historyMessages);
+  if (userText) llmMessages.push({ role: 'user', content: userText });
+
   const toolCalls = [];
 
   for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
-    const response = await callLLM(allMessages);
+    const response = await callLLM(llmMessages);
     const choice = response.choices?.[0];
     if (!choice) throw new Error('LLM响应格式错误');
 
@@ -361,7 +382,7 @@ async function chat(messages, fileIds = [], options = {}) {
         functionName: tc.function.name
       })));
 
-      allMessages.push(message);
+      llmMessages.push(message);
 
       for (const toolCall of message.tool_calls) {
         const args = JSON.parse(toolCall.function.arguments);
@@ -385,18 +406,18 @@ async function chat(messages, fileIds = [], options = {}) {
           functionName: toolCall.function.name
         });
 
-        allMessages.push(toolMessage);
+        llmMessages.push(toolMessage);
       }
     } else {
-      // 持久化助手回复及工具调用历史
+      const finalContent = message.content || '操作完成';
       conversationService.appendMessage(conversationId, {
         role: 'assistant',
-        content: message.content || '操作完成',
+        content: finalContent,
         toolCalls
       });
       return {
         type: 'text',
-        content: message.content || '操作完成',
+        content: finalContent,
         toolCalls,
         fileIds,
         conversationId
@@ -404,7 +425,7 @@ async function chat(messages, fileIds = [], options = {}) {
     }
   }
 
-  const finalResponse = await callLLM(allMessages);
+  const finalResponse = await callLLM(llmMessages);
   const finalChoice = finalResponse.choices?.[0];
   const finalContent = finalChoice?.message?.content || '操作完成';
   conversationService.appendMessage(conversationId, {
@@ -422,6 +443,62 @@ async function chat(messages, fileIds = [], options = {}) {
   };
 }
 
+async function chat(messages, fileIds = [], options = {}) {
+  const { conversationId: incomingConvId, title } = options;
+
+  const incomingMessages = Array.isArray(messages) ? messages : [];
+  const lastUser = [...incomingMessages].reverse().find((m) => m && m.role === 'user');
+  const latestUserText = lastUser ? (lastUser.content || '') : '';
+  // 前端场景：调用方已经把完整 messages 传进来了，这里直接当作 history 用，
+  // 服务端再把最后一条 user 原文追加一次入库，避免重复。
+  const historyMessages = incomingMessages
+    .filter((m) => !(lastUser && m === lastUser))
+    .map((m) => ({ role: m.role, content: m.content || '' }));
+
+  return runConversation({
+    conversationId: incomingConvId,
+    fileIds,
+    historyMessages,
+    latestUserText,
+    title
+  });
+}
+
+// 供外部 AI 使用的入口：只接收字符串消息，由服务端从 DB 拼历史
+async function externalChat({ conversationId, message, fileIds, title }) {
+  const userText = (message == null ? '' : String(message)).trim();
+  if (!userText) {
+    const err = new Error('message 不能为空');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  // 外部的 conversationId 直接当作 externalId 用（按字符串处理；新建时落库，后续按它查）
+  const externalId = (conversationId == null || String(conversationId).trim() === '')
+    ? null
+    : String(conversationId).trim();
+
+  // 如果该 externalId 已存在 → 拉历史拼上下文
+  let historyMessages = [];
+  if (externalId) {
+    const conv = conversationService.findByExternalId(externalId);
+    if (conv) {
+      historyMessages = (conv.messages || [])
+        .filter((m) => m.role === 'user' || m.role === 'assistant')
+        .map((m) => ({ role: m.role, content: m.content || '' }));
+    }
+  }
+
+  return runConversation({
+    conversationId: null,           // 外部场景不主动用内部数字 ID
+    externalId,
+    fileIds,
+    historyMessages,
+    latestUserText: userText,
+    title
+  });
+}
+
 function getConfig() {
   return agentConfig;
 }
@@ -433,6 +510,7 @@ function reloadConfig() {
 
 module.exports = {
   chat,
+  externalChat,
   getConfig,
   reloadConfig,
   listConversations: conversationService.listConversations,

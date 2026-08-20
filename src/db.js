@@ -81,6 +81,7 @@ CREATE TABLE IF NOT EXISTS agent_conversations (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   title       TEXT    NOT NULL,
   file_ids    TEXT    NOT NULL DEFAULT '[]',
+  external_id TEXT,
   created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
   updated_at  TEXT    NOT NULL DEFAULT (datetime('now'))
 );
@@ -112,5 +113,9 @@ function ensureColumn(table, column, decl) {
 ensureColumn('api_params', 'parent_id',   'parent_id INTEGER');
 ensureColumn('api_params', 'order_index', 'order_index INTEGER NOT NULL DEFAULT 0');
 ensureColumn('api_configs', 'source_file_id', 'source_file_id INTEGER');
+ensureColumn('agent_conversations', 'external_id', 'external_id TEXT');
+
+// 依赖上面新增列的索引，必须在 ensureColumn 之后再创建
+db.exec(`CREATE INDEX IF NOT EXISTS idx_agent_conv_external ON agent_conversations(external_id);`);
 
 module.exports = db;
