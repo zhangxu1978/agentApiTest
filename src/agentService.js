@@ -7,6 +7,7 @@ const https = require('https');
 
 const configService = require('./configService');
 const fileService = require('./fileService');
+const conversationService = require('./conversationService');
 
 let agentConfig = null;
 
@@ -274,8 +275,34 @@ function buildFileContext(fileIds) {
   };
 }
 
-async function chat(messages, fileIds = []) {
+async function chat(messages, fileIds = [], options = {}) {
   const MAX_ITERATIONS = 5;
+  const { conversationId: incomingConvId, title } = options;
+
+  // 1. 解析 / 创建会话
+  let conversation = null;
+  let conversationId = incomingConvId ? Number(incomingConvId) : null;
+  if (conversationId) {
+    conversation = conversationService.getConversation(conversationId);
+    if (!conversation) conversation = null;
+  }
+  const isFirstTurn = !conversation || (conversation.messages || []).length === 0;
+  if (!conversation) {
+    const firstUserText = (Array.isArray(messages) && messages.length)
+      ? (messages[messages.length - 1].content || '')
+      : '';
+    const inferredTitle = (title && String(title).trim())
+      || (firstUserText ? String(firstUserText).replace(/\s+/g, ' ').slice(0, 40) : '新对话');
+    conversation = conversationService.createConversation({ title: inferredTitle, fileIds });
+    conversationId = conversation.id;
+  }
+  conversationService.touchConversation(conversationId, Array.isArray(fileIds) ? fileIds : []);
+
+  // 2. 持久化最近一条用户消息（前端已发送完整上下文，但入库只保存用户原文，避免 token 爆炸）
+  const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+  if (lastUser) {
+    conversationService.appendMessage(conversationId, { role: 'user', content: lastUser.content || '' });
+  }
 
   const systemPrompt = {
     role: 'system',
@@ -361,23 +388,37 @@ async function chat(messages, fileIds = []) {
         allMessages.push(toolMessage);
       }
     } else {
+      // 持久化助手回复及工具调用历史
+      conversationService.appendMessage(conversationId, {
+        role: 'assistant',
+        content: message.content || '操作完成',
+        toolCalls
+      });
       return {
         type: 'text',
         content: message.content || '操作完成',
         toolCalls,
-        fileIds
+        fileIds,
+        conversationId
       };
     }
   }
 
   const finalResponse = await callLLM(allMessages);
   const finalChoice = finalResponse.choices?.[0];
+  const finalContent = finalChoice?.message?.content || '操作完成';
+  conversationService.appendMessage(conversationId, {
+    role: 'assistant',
+    content: finalContent,
+    toolCalls
+  });
 
   return {
     type: 'text',
-    content: finalChoice?.message?.content || '操作完成',
+    content: finalContent,
     toolCalls,
-    fileIds
+    fileIds,
+    conversationId
   };
 }
 
@@ -390,4 +431,13 @@ function reloadConfig() {
   return agentConfig;
 }
 
-module.exports = { chat, getConfig, reloadConfig };
+module.exports = {
+  chat,
+  getConfig,
+  reloadConfig,
+  listConversations: conversationService.listConversations,
+  getConversation: conversationService.getConversation,
+  createConversation: conversationService.createConversation,
+  renameConversation: conversationService.renameConversation,
+  deleteConversation: conversationService.deleteConversation,
+};

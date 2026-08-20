@@ -8,10 +8,133 @@
   <style>
     .chat-container {
       display: flex;
-      flex-direction: column;
+      flex-direction: row;
       height: calc(100vh - 60px);
       background: var(--bg);
+      position: relative;
     }
+
+    .chat-sidebar {
+      width: 280px;
+      flex-shrink: 0;
+      background: var(--panel);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      transition: width 0.2s ease, margin-left 0.2s ease;
+      overflow: hidden;
+    }
+    .chat-sidebar.collapsed {
+      width: 0;
+      border-right: 0;
+    }
+    .chat-sidebar-inner {
+      width: 280px;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .chat-sidebar-header {
+      padding: 12px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .chat-sidebar-header .row {
+      display: flex; gap: 6px; align-items: center;
+    }
+    .chat-sidebar-header h2 {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .chat-sidebar-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .chat-sidebar-empty {
+      color: var(--muted);
+      font-size: 12px;
+      padding: 16px 8px;
+      text-align: center;
+    }
+    .conv-item {
+      padding: 8px 10px;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      transition: background 0.15s, border-color 0.15s;
+      position: relative;
+    }
+    .conv-item:hover { background: var(--panel-2); }
+    .conv-item.active {
+      background: var(--code-bg);
+      border-color: var(--primary);
+    }
+    .conv-title {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .conv-meta {
+      font-size: 11px;
+      color: var(--muted);
+      display: flex;
+      gap: 6px;
+    }
+    .conv-actions {
+      position: absolute;
+      right: 6px;
+      top: 6px;
+      display: none;
+      gap: 4px;
+    }
+    .conv-item:hover .conv-actions,
+    .conv-item.active .conv-actions {
+      display: flex;
+    }
+    .conv-actions button {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 2px 6px;
+      font-size: 11px;
+      cursor: pointer;
+      color: var(--muted);
+    }
+    .conv-actions button:hover { color: var(--text); }
+    .conv-actions button.danger:hover { color: var(--danger); border-color: var(--danger); }
+
+    .chat-main {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .sidebar-toggle {
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 4px 8px;
+      cursor: pointer;
+      font-size: 14px;
+      color: var(--text);
+      line-height: 1;
+    }
+    .sidebar-toggle:hover { background: var(--panel-2); }
     
     .chat-header {
       padding: 12px 16px;
@@ -390,6 +513,156 @@
       background: var(--panel);
     }
     .upload-progress.active { display: block; }
+
+    /* ====== 助手消息：Markdown 样式 + 思考折叠 + 复制 ====== */
+    .message.user .message-content {
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .message.assistant .message-content { padding: 12px 16px; }
+    .message-content .md-body { line-height: 1.65; color: var(--text); font-size: 14px; }
+    .message-content .md-body > *:first-child { margin-top: 0; }
+    .message-content .md-body > *:last-child { margin-bottom: 0; }
+    .message-content .md-body h1,
+    .message-content .md-body h2,
+    .message-content .md-body h3,
+    .message-content .md-body h4 { margin: 12px 0 6px; line-height: 1.35; font-weight: 600; }
+    .message-content .md-body h1 { font-size: 18px; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+    .message-content .md-body h2 { font-size: 16px; }
+    .message-content .md-body h3 { font-size: 15px; }
+    .message-content .md-body h4 { font-size: 14px; }
+    .message-content .md-body p { margin: 6px 0; }
+    .message-content .md-body strong { font-weight: 600; color: var(--text); }
+    .message-content .md-body em { font-style: italic; }
+    .message-content .md-body code {
+      background: var(--code-bg);
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-family: ui-monospace, SFMono-Regular, "PingFang SC", monospace;
+      font-size: 0.875em;
+      color: var(--rouge-deep);
+    }
+    .message-content .md-body pre {
+      background: var(--code-bg);
+      padding: 10px 12px;
+      border-radius: 6px;
+      overflow-x: auto;
+      font-family: ui-monospace, SFMono-Regular, "PingFang SC", monospace;
+      font-size: 12.5px;
+      line-height: 1.55;
+      margin: 8px 0;
+      border: 1px solid var(--border);
+    }
+    .message-content .md-body pre code {
+      background: transparent;
+      padding: 0;
+      color: inherit;
+      font-size: inherit;
+    }
+    .message-content .md-body ul,
+    .message-content .md-body ol { padding-left: 22px; margin: 6px 0; }
+    .message-content .md-body li { margin: 2px 0; }
+    .message-content .md-body li > p { margin: 2px 0; }
+    .message-content .md-body blockquote {
+      border-left: 3px solid var(--border-classic);
+      padding: 6px 12px;
+      color: var(--muted);
+      margin: 8px 0;
+      background: rgba(184, 146, 58, 0.06);
+      border-radius: 0 4px 4px 0;
+    }
+    .message-content .md-body table {
+      border-collapse: collapse;
+      margin: 8px 0;
+      font-size: 13px;
+      width: auto;
+      max-width: 100%;
+    }
+    .message-content .md-body table th,
+    .message-content .md-body table td {
+      border: 1px solid var(--border);
+      padding: 5px 10px;
+      text-align: left;
+    }
+    .message-content .md-body table th {
+      background: var(--panel-2);
+      font-weight: 600;
+    }
+    .message-content .md-body hr {
+      border: 0;
+      border-top: 1px solid var(--border);
+      margin: 12px 0;
+    }
+    .message-content .md-body a {
+      color: var(--primary);
+      text-decoration: none;
+      border-bottom: 1px dashed var(--primary);
+    }
+    .message-content .md-body a:hover { color: var(--primary-hover); }
+
+    /* 思考块折叠 */
+    .think-details {
+      margin: 0 0 10px 0;
+      border: 1px dashed var(--border-classic);
+      border-radius: 6px;
+      background: rgba(184, 146, 58, 0.06);
+    }
+    .think-details > summary {
+      cursor: pointer;
+      padding: 6px 10px;
+      font-size: 12px;
+      color: var(--muted);
+      user-select: none;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .think-details > summary::-webkit-details-marker { display: none; }
+    .think-details > summary::before {
+      content: '💭';
+      font-size: 13px;
+    }
+    .think-details > summary .think-label { font-weight: 500; }
+    .think-details > summary .think-hint {
+      margin-left: auto;
+      font-size: 11px;
+      color: var(--muted);
+      opacity: 0.85;
+    }
+    .think-details[open] > summary .think-hint::before { content: '（点击收起）'; }
+    .think-details:not([open]) > summary .think-hint::before { content: '（点击展开思考过程）'; }
+    .think-details .think-body {
+      padding: 8px 12px 10px 12px;
+      border-top: 1px dashed var(--border);
+      color: var(--muted);
+      font-size: 12.5px;
+      line-height: 1.65;
+      white-space: pre-wrap;
+      max-height: 360px;
+      overflow-y: auto;
+      word-break: break-word;
+    }
+
+    /* 消息复制按钮 */
+    .msg-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 6px;
+      margin-top: 6px;
+    }
+    .msg-actions button {
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 2px 8px;
+      font-size: 11px;
+      color: var(--muted);
+      cursor: pointer;
+      line-height: 1.4;
+    }
+    .msg-actions button:hover { color: var(--text); background: var(--panel-2); }
+    .msg-actions button.copied { color: var(--success); border-color: var(--success); }
   </style>
 </head>
 <body>
@@ -409,32 +682,55 @@
   </header>
 
   <div class="chat-container">
-    <div class="chat-header">
-      <div>
-        <h1>与 Agent 对话</h1>
-        <span id="config-status" class="config-status error">未配置 API Key</span>
+    <aside id="chat-sidebar" class="chat-sidebar">
+      <div class="chat-sidebar-inner">
+        <div class="chat-sidebar-header">
+          <div class="row">
+            <h2 style="flex:1;">历史对话</h2>
+            <button id="btn-sidebar-toggle" class="sidebar-toggle" title="收起">‹</button>
+          </div>
+          <button id="btn-new-conv" class="btn btn-primary" style="width:100%;">+ 新对话</button>
+        </div>
+        <div id="conv-list" class="chat-sidebar-list">
+          <div class="chat-sidebar-empty">暂无历史对话</div>
+        </div>
       </div>
-      <button id="btn-reload-config" class="btn btn-mini">刷新配置</button>
-    </div>
+    </aside>
 
-    <div class="chat-messages" id="chat-messages">
-      <div class="empty-state" id="empty-state">
-        <h3>欢迎使用 Agent 接口助手</h3>
-        <p>用自然语言描述您想要创建或管理的接口，我来帮您完成！</p>
-        <p style="margin-top: 8px; font-size: 12px;">例如："创建一个用户登录接口"、"列出所有接口"、"删除ID为1的接口"</p>
+    <main class="chat-main">
+      <div class="chat-header">
+        <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+          <button id="btn-sidebar-show" class="sidebar-toggle" title="展开历史对话" style="display:none;">›</button>
+          <div style="min-width:0;">
+            <h1 id="conv-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60vw;">与 Agent 对话</h1>
+            <span id="config-status" class="config-status error">未配置 API Key</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;">
+          <button id="btn-rename-conv" class="btn btn-mini" title="重命名当前对话">重命名</button>
+          <button id="btn-reload-config" class="btn btn-mini">刷新配置</button>
+        </div>
       </div>
-    </div>
 
-    <div class="chat-input">
-      <div class="file-chips" id="file-chips"></div>
-      <div class="upload-progress" id="upload-progress"></div>
-      <div class="input-row">
-        <button id="btn-upload" class="btn icon-btn" title="上传文件">📎</button>
-        <input id="file-input" type="file" hidden accept=".doc,.docx,.pdf,.xls,.xlsx,.txt,.md,.csv,.json,.png,.jpg,.jpeg,.gif,.bmp,.webp,.ppt,.pptx,.html,.htm" />
-        <textarea id="input-message" placeholder="输入您的请求（支持直接 Ctrl+V 粘贴文件/图片）"></textarea>
-        <button id="btn-send" class="btn btn-primary">发送</button>
+      <div class="chat-messages" id="chat-messages">
+        <div class="empty-state" id="empty-state">
+          <h3>欢迎使用 Agent 接口助手</h3>
+          <p>用自然语言描述您想要创建或管理的接口，我来帮您完成！</p>
+          <p style="margin-top: 8px; font-size: 12px;">例如："创建一个用户登录接口"、"列出所有接口"、"删除ID为1的接口"</p>
+        </div>
       </div>
-    </div>
+
+      <div class="chat-input">
+        <div class="file-chips" id="file-chips"></div>
+        <div class="upload-progress" id="upload-progress"></div>
+        <div class="input-row">
+          <button id="btn-upload" class="btn icon-btn" title="上传文件">📎</button>
+          <input id="file-input" type="file" hidden accept=".doc,.docx,.pdf,.xls,.xlsx,.txt,.md,.csv,.json,.png,.jpg,.jpeg,.gif,.bmp,.webp,.ppt,.pptx,.html,.htm" />
+          <textarea id="input-message" placeholder="输入您的请求（支持直接 Ctrl+V 粘贴文件/图片）"></textarea>
+          <button id="btn-send" class="btn btn-primary">发送</button>
+        </div>
+      </div>
+    </main>
   </div>
 
   <div id="toast" class="toast hidden"></div>
@@ -459,13 +755,21 @@
 
   <script>
     const API = {
-      chat: (messages, fileIds) => fetch('/agent/chat', {
+      chat: (messages, fileIds, conversationId) => fetch('/agent/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages, fileIds })
+        body: JSON.stringify({ messages, fileIds, conversationId })
       }).then(r => r.json()),
       getConfig: () => fetch('/agent/config').then(r => r.json()),
       reloadConfig: () => fetch('/agent/config/reload', { method: 'POST' }).then(r => r.json()),
+      listConversations: () => fetch('/agent/conversations').then(r => r.json()),
+      getConversation: (id) => fetch('/agent/conversations/' + id).then(r => r.json()),
+      renameConversation: (id, title) => fetch('/agent/conversations/' + id, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title })
+      }).then(r => r.json()),
+      deleteConversation: (id) => fetch('/agent/conversations/' + id, { method: 'DELETE' }).then(r => r.json()),
       uploadFile: (file, onProgress) => {
         return new Promise((resolve, reject) => {
           const fd = new FormData();
@@ -494,7 +798,12 @@
 
     const $ = id => document.getElementById(id);
 
-    let messages = [];
+    // ===== 会话状态 =====
+    let messages = [];            // 当前会话的 messages 历史（重新加载会话时覆盖）
+    let currentConversationId = null;  // 当前会话 id，null = 新会话尚未在后端创建
+    let conversations = [];       // 侧边栏历史对话列表
+    let suppressRenderMessage = false; // 加载历史时不再 addMessage 事件
+
     const attachedFiles = []; // [{id, name, uploading?}]
 
     function toast(msg, type = 'ok') {
@@ -555,6 +864,53 @@
       return String(text)
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    }
+
+    // 抽出 `` 块（可多个）。返回 { think: string|null, answer: string }
+    function extractThink(text) {
+      if (text == null) return { think: null, answer: '' };
+      const s = String(text);
+      const openTag = '<think>', closeTag = '</think>';
+      const thinks = [];
+      let buf = '';
+      let i = 0;
+      while (i < s.length) {
+        const openIdx = s.indexOf(openTag, i);
+        if (openIdx === -1) { buf += s.slice(i); break; }
+        buf += s.slice(i, openIdx);
+        const closeIdx = s.indexOf(closeTag, openIdx + openTag.length);
+        if (closeIdx === -1) {
+          // 没找到闭合：把剩余部分当作思考内容
+          thinks.push(s.slice(openIdx + openTag.length));
+          buf = '';
+          break;
+        }
+        thinks.push(s.slice(openIdx + openTag.length, closeIdx).trim());
+        i = closeIdx + closeTag.length;
+      }
+      const think = thinks.filter(Boolean).join('\n\n').trim();
+      return {
+        think: think || null,
+        answer: buf.trim()
+      };
+    }
+
+    // 把助手内容渲染成 HTML：先抽 `` → 其余走 Markdown
+    function renderAssistantContent(text) {
+      const { think, answer } = extractThink(text);
+      let html = '';
+      if (think) {
+        html += '<details class="think-details">'
+          + '<summary><span class="think-label">已思考</span><span class="think-hint"></span></summary>'
+          + '<div class="think-body">' + escapeHtml(think) + '</div>'
+          + '</details>';
+      }
+      if (answer) {
+        html += '<div class="md-body">' + renderMarkdown(answer) + '</div>';
+      } else if (!think) {
+        html += '<div class="md-body"></div>';
+      }
+      return html;
     }
 
     // 极简 Markdown 渲染：仅覆盖常规标题/段落/列表/引用/代码/链接/表格/粗斜体，足以用来预览转换后的内容
@@ -778,7 +1134,12 @@
 
       const contentEl = document.createElement('div');
       contentEl.className = 'message-content';
-      contentEl.textContent = content;
+      if (role === 'assistant') {
+        contentEl.innerHTML = renderAssistantContent(content || '');
+      } else {
+        // 用户消息：保持纯文本（已经被 CSS pre-wrap 处理换行）
+        contentEl.textContent = content || '';
+      }
 
       messageEl.appendChild(avatar);
       messageEl.appendChild(contentEl);
@@ -792,26 +1153,30 @@
           toolEl.className = 'tool-call';
 
           const toolName = document.createElement('div');
-          toolName.innerHTML = `<span style="color: var(--muted); font-size: 11px;">[工具调用 ${index + 1}]</span> <span class="tool-name">${toolCall.name}</span>`;
+          toolName.innerHTML = `<span style="color: var(--muted); font-size: 11px;">[工具调用 ${index + 1}]</span> <span class="tool-name">${escapeHtml(toolCall.name)}</span>`;
           toolEl.appendChild(toolName);
 
           const toolArgs = document.createElement('div');
           toolArgs.style.marginTop = '4px';
           toolArgs.style.fontSize = '11px';
           toolArgs.style.color = 'var(--muted)';
+          toolArgs.style.whiteSpace = 'pre-wrap';
+          toolArgs.style.wordBreak = 'break-word';
           toolArgs.textContent = `参数: ${JSON.stringify(toolCall.args)}`;
           toolEl.appendChild(toolArgs);
 
           const resultEl = document.createElement('div');
           resultEl.className = 'tool-result';
-          if (toolCall.result.success) {
+          if (toolCall.result && toolCall.result.success) {
             resultEl.innerHTML = `<span class="success">✓ 成功</span>`;
             if (toolCall.result.data) {
               const dataStr = JSON.stringify(toolCall.result.data, null, 2);
-              resultEl.innerHTML += `<br/><pre style="margin-top: 4px; padding: 8px; background: rgba(0,0,0,0.1); border-radius: 4px; font-size: 11px; max-height: 150px; overflow-y: auto;">${dataStr.substring(0, 800)}${dataStr.length > 800 ? '...' : ''}</pre>`;
+              const limited = dataStr.length > 800 ? dataStr.substring(0, 800) + '...' : dataStr;
+              resultEl.innerHTML += `<pre style="margin-top: 4px; padding: 8px; background: rgba(0,0,0,0.06); border-radius: 4px; font-size: 11px; max-height: 150px; overflow-y: auto;">${escapeHtml(limited)}</pre>`;
             }
           } else {
-            resultEl.innerHTML = `<span class="error">✗ 失败</span>: ${toolCall.result.message}`;
+            const msg = (toolCall.result && toolCall.result.message) || '未知错误';
+            resultEl.innerHTML = `<span class="error">✗ 失败</span>: ${escapeHtml(msg)}`;
           }
           toolEl.appendChild(resultEl);
           toolsContainer.appendChild(toolEl);
@@ -819,6 +1184,45 @@
 
         messageEl.appendChild(toolsContainer);
       }
+
+      // 消息操作按钮：复制（用户消息可复制原文本；助手消息复制去除 think 后的回答）
+      const actions = document.createElement('div');
+      actions.className = 'msg-actions';
+      const copyBtn = document.createElement('button');
+      copyBtn.textContent = '📋 复制';
+      copyBtn.addEventListener('click', async () => {
+        let text;
+        if (role === 'assistant') {
+          // 复制时不带 ``
+          text = extractThink(content || '').answer || content || '';
+        } else {
+          text = content || '';
+        }
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(text);
+          } else {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+          }
+          copyBtn.textContent = '✓ 已复制';
+          copyBtn.classList.add('copied');
+          setTimeout(() => {
+            copyBtn.textContent = '📋 复制';
+            copyBtn.classList.remove('copied');
+          }, 1600);
+        } catch (e) {
+          toast('复制失败: ' + e.message, 'err');
+        }
+      });
+      actions.appendChild(copyBtn);
+      messageEl.appendChild(actions);
 
       container.appendChild(messageEl);
       container.scrollTop = container.scrollHeight;
@@ -851,14 +1255,24 @@
 
       try {
         messages.push({ role: 'user', content: finalText });
-        const res = await API.chat(messages, fileIds);
+        const res = await API.chat(messages, fileIds, currentConversationId);
 
         container.removeChild(typingEl);
 
         if (res.ok && res.data) {
-          const { content, toolCalls = [] } = res.data;
+          const { content, toolCalls = [], conversationId: newConvId } = res.data;
           messages.push({ role: 'assistant', content });
           addMessage('assistant', content, toolCalls);
+
+          // 服务端可能新建了会话，更新 id 与列表
+          if (newConvId && newConvId !== currentConversationId) {
+            currentConversationId = newConvId;
+            await refreshConversationList();
+            updateTitleFromConversation(newConvId);
+          } else if (currentConversationId) {
+            // 仍是同一会话，仅刷新 updated_at 让列表置顶
+            await refreshConversationList();
+          }
         } else {
           toast(res.message || '请求失败', 'err');
           messages.pop();
@@ -867,6 +1281,169 @@
         container.removeChild(typingEl);
         toast('请求失败: ' + e.message, 'err');
         messages.pop();
+      }
+    }
+
+    function updateTitleFromConversation(convId) {
+      const c = conversations.find(x => x.id === convId);
+      if (c) {
+        $('conv-title').textContent = c.title || '与 Agent 对话';
+      }
+    }
+
+    // ===== 历史对话侧边栏 =====
+    function fmtTime(iso) {
+      if (!iso) return '';
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return iso;
+      const now = new Date();
+      const sameDay = d.toDateString() === now.toDateString();
+      const pad = n => String(n).padStart(2, '0');
+      return sameDay
+        ? pad(d.getHours()) + ':' + pad(d.getMinutes())
+        : pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+    }
+
+    async function refreshConversationList() {
+      const res = await API.listConversations();
+      if (!res.ok) return;
+      conversations = res.data || [];
+      renderConversationList();
+    }
+
+    function renderConversationList() {
+      const wrap = $('conv-list');
+      wrap.innerHTML = '';
+      if (conversations.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'chat-sidebar-empty';
+        empty.textContent = '暂无历史对话';
+        wrap.appendChild(empty);
+        return;
+      }
+      for (const c of conversations) {
+        const item = document.createElement('div');
+        item.className = 'conv-item' + (c.id === currentConversationId ? ' active' : '');
+        item.dataset.id = String(c.id);
+
+        const title = document.createElement('div');
+        title.className = 'conv-title';
+        title.textContent = c.title || '新对话';
+        title.title = (c.preview || c.title || '').slice(0, 200);
+
+        const meta = document.createElement('div');
+        meta.className = 'conv-meta';
+        const time = document.createElement('span');
+        time.textContent = fmtTime(c.updatedAt);
+        const count = document.createElement('span');
+        count.textContent = '· ' + c.messageCount + ' 条消息';
+        meta.appendChild(time);
+        meta.appendChild(count);
+
+        const actions = document.createElement('div');
+        actions.className = 'conv-actions';
+        const renameBtn = document.createElement('button');
+        renameBtn.textContent = '✎';
+        renameBtn.title = '重命名';
+        renameBtn.addEventListener('click', (e) => { e.stopPropagation(); promptRename(c); });
+        const delBtn = document.createElement('button');
+        delBtn.textContent = '🗑';
+        delBtn.title = '删除';
+        delBtn.className = 'danger';
+        delBtn.addEventListener('click', (e) => { e.stopPropagation(); confirmDelete(c); });
+        actions.appendChild(renameBtn);
+        actions.appendChild(delBtn);
+
+        item.appendChild(title);
+        item.appendChild(meta);
+        item.appendChild(actions);
+        item.addEventListener('click', () => loadConversation(c.id));
+        wrap.appendChild(item);
+      }
+    }
+
+    async function loadConversation(id) {
+      // 已在当前会话 → 不重复加载
+      if (id === currentConversationId && messages.length > 0) return;
+      const res = await API.getConversation(id);
+      if (!res.ok) { toast(res.message || '加载失败', 'err'); return; }
+      const conv = res.data;
+      currentConversationId = conv.id;
+      $('conv-title').textContent = conv.title || '与 Agent 对话';
+      renderConversationList();
+
+      // 重置消息区并重建
+      const container = $('chat-messages');
+      container.innerHTML = '';
+      suppressRenderMessage = false;
+      messages = [];
+      if (!conv.messages || conv.messages.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'empty-state';
+        empty.id = 'empty-state';
+        empty.innerHTML = '<h3>欢迎使用 Agent 接口助手</h3><p>用自然语言描述您想要创建或管理的接口，我来帮您完成！</p>';
+        container.appendChild(empty);
+      } else {
+        for (const m of conv.messages) {
+          if (m.role === 'user' || m.role === 'assistant') {
+            messages.push({ role: m.role, content: m.content });
+            addMessage(m.role, m.content, m.toolCalls || []);
+          }
+        }
+      }
+    }
+
+    function startNewConversation() {
+      currentConversationId = null;
+      messages = [];
+      const container = $('chat-messages');
+      container.innerHTML = '';
+      const empty = document.createElement('div');
+      empty.className = 'empty-state';
+      empty.id = 'empty-state';
+      empty.innerHTML = '<h3>欢迎使用 Agent 接口助手</h3><p>用自然语言描述您想要创建或管理的接口，我来帮您完成！</p><p style="margin-top: 8px; font-size: 12px;">例如："创建一个用户登录接口"、"列出所有接口"、"删除ID为1的接口"</p>';
+      container.appendChild(empty);
+      $('conv-title').textContent = '新对话';
+      // 清掉活动选中态
+      renderConversationList();
+    }
+
+    async function promptRename(c) {
+      const current = c.title || '';
+      const next = window.prompt('为这个对话起一个新名字：', current);
+      if (next == null) return;
+      const title = next.trim();
+      if (!title) { toast('标题不能为空', 'err'); return; }
+      const res = await API.renameConversation(c.id, title);
+      if (!res.ok) { toast(res.message || '重命名失败', 'err'); return; }
+      if (c.id === currentConversationId) $('conv-title').textContent = title;
+      await refreshConversationList();
+      toast('已重命名');
+    }
+
+    async function confirmDelete(c) {
+      if (!window.confirm(`确认删除对话「${c.title || '新对话'}」？此操作不可撤销。`)) return;
+      const res = await API.deleteConversation(c.id);
+      if (!res.ok) { toast(res.message || '删除失败', 'err'); return; }
+      if (c.id === currentConversationId) startNewConversation();
+      await refreshConversationList();
+      toast('已删除');
+    }
+
+    function setSidebarCollapsed(collapsed) {
+      const sidebar = $('chat-sidebar');
+      const toggle = $('btn-sidebar-toggle');
+      const show = $('btn-sidebar-show');
+      if (collapsed) {
+        sidebar.classList.add('collapsed');
+        toggle.textContent = '›';
+        toggle.title = '展开';
+        show.style.display = '';
+      } else {
+        sidebar.classList.remove('collapsed');
+        toggle.textContent = '‹';
+        toggle.title = '收起';
+        show.style.display = 'none';
       }
     }
 
@@ -934,6 +1511,14 @@
 
       $('btn-send').addEventListener('click', sendMessage);
       $('btn-reload-config').addEventListener('click', reloadConfig);
+      $('btn-new-conv').addEventListener('click', startNewConversation);
+      $('btn-rename-conv').addEventListener('click', () => {
+        if (!currentConversationId) { toast('当前是新对话，发送一条消息后再来重命名', 'err'); return; }
+        const c = conversations.find(x => x.id === currentConversationId);
+        if (c) promptRename(c);
+      });
+      $('btn-sidebar-toggle').addEventListener('click', () => setSidebarCollapsed(true));
+      $('btn-sidebar-show').addEventListener('click', () => setSidebarCollapsed(false));
 
       // 预览弹窗交互
       $('btn-preview-close').addEventListener('click', closePreview);
@@ -957,6 +1542,7 @@
       });
 
       checkConfig();
+      refreshConversationList();
     });
   </script>
 </body>
