@@ -99,6 +99,20 @@ CREATE TABLE IF NOT EXISTS agent_messages (
 
 CREATE INDEX IF NOT EXISTS idx_agent_msg_conv_seq ON agent_messages(conversation_id, seq);
 CREATE INDEX IF NOT EXISTS idx_agent_conv_updated ON agent_conversations(updated_at);
+
+CREATE TABLE IF NOT EXISTS access_logs (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  method      TEXT    NOT NULL,
+  path        TEXT    NOT NULL,
+  status      INTEGER NOT NULL DEFAULT 0,
+  headers     TEXT    NOT NULL DEFAULT '{}',
+  query       TEXT    NOT NULL DEFAULT '{}',
+  body        TEXT    NOT NULL DEFAULT '{}',
+  created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_access_logs_created ON access_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_access_logs_path    ON access_logs(path);
 `;
 
 db.exec(SCHEMA);

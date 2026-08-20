@@ -10,7 +10,8 @@ const router = express.Router();
 
 router.all('*', (req, res) => {
   if (req.path !== '/health') {
-    logger.addLog(req);
+    // 在响应结束后记录状态码
+    res.on('finish', () => logger.addLog(req, res.statusCode));
   }
   const config = service.getConfigByPath(req.method, req.path);
   if (!config) {

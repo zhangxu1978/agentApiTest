@@ -7,7 +7,9 @@ const logger = require('../logger');
 const router = express.Router();
 
 router.get('/logs', (req, res) => {
-  res.json({ ok: true, data: logger.getLogs() });
+  const limit = Number(req.query.limit) || 100;
+  const offset = Number(req.query.offset) || 0;
+  res.json({ ok: true, data: logger.getLogs({ limit, offset }) });
 });
 
 router.delete('/logs', (req, res) => {

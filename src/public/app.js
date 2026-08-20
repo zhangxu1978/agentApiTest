@@ -540,7 +540,8 @@ let logsData = [];
 async function refreshLogs() {
   const res = await API.logs();
   if (res.ok) {
-    logsData = res.data;
+    // 兼容旧结构（数组）和新结构（{ total, items }）
+    logsData = Array.isArray(res.data) ? res.data : (res.data && res.data.items) || [];
     renderLogs();
   } else {
     toast(res.message || '加载日志失败', 'err');
