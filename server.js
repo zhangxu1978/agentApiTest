@@ -16,6 +16,11 @@ const PORT = process.env.PORT || 3421;
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 
+// Health check
+app.get('/health', (req, res) => {
+  res.json({ ok: true, status: 'up', uptime: process.uptime(), timestamp: Date.now() });
+});
+
 // Static admin UI
 app.use(express.static(path.join(__dirname, 'src', 'public')));
 

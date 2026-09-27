@@ -6,7 +6,15 @@ const API = {
   create: (data) => fetch('/admin/api/configs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).then((r) => r.json()),
   update: (id, data) => fetch(`/admin/api/configs/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).then((r) => r.json()),
   remove: (id) => fetch(`/admin/api/configs/${id}`, { method: 'DELETE' }).then((r) => r.json()),
-  logs:   () => fetch('/admin/api/logs').then((r) => r.json()),
+  logs:   (params = {}) => {
+    const qs = new URLSearchParams();
+    if (params.date) qs.set('date', params.date);
+    if (params.path) qs.set('path', params.path);
+    if (params.limit) qs.set('limit', String(params.limit));
+    if (params.offset) qs.set('offset', String(params.offset));
+    const url = '/admin/api/logs' + (qs.toString() ? `?${qs}` : '');
+    return fetch(url).then((r) => r.json());
+  },
   clearLogs: () => fetch('/admin/api/logs', { method: 'DELETE' }).then((r) => r.json())
 };
 
@@ -537,11 +545,39 @@ function toggleLogs() {
 
 let logsData = [];
 
+function todayStr() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function getLogFilterParams() {
+  const dateInput = $('log-filter-date').value;
+  const pathInput = $('log-filter-path').value.trim();
+  return {
+    date: dateInput || todayStr(),
+    path: pathInput
+  };
+}
+
+function initLogFilters() {
+  $('log-filter-date').value = todayStr();
+}
+
 async function refreshLogs() {
-  const res = await API.logs();
+  const params = getLogFilterParams();
+  const res = await API.logs(params);
   if (res.ok) {
     // 兼容旧结构（数组）和新结构（{ total, items }）
-    logsData = Array.isArray(res.data) ? res.data : (res.data && res.data.items) || [];
+    const data = res.data;
+    logsData = Array.isArray(data) ? data : (data && data.items) || [];
+    const total = Array.isArray(data) ? logsData.length : (data && data.total) || 0;
+    const summary = $('log-filter-summary');
+    if (summary) {
+      const dateLabel = params.date || todayStr();
+      const pathLabel = params.path ? ` · 接口含 "${params.path}"` : '';
+      summary.textContent = `${dateLabel}${pathLabel} · 共 ${total} 条`;
+    }
     renderLogs();
   } else {
     toast(res.message || '加载日志失败', 'err');
@@ -625,6 +661,7 @@ document.addEventListener('DOMContentLoaded', () => {
   $('btn-clear-logs').addEventListener('click', clearLogs);
   $('btn-close-logs').addEventListener('click', toggleLogs);
   $('btn-close-log-detail').addEventListener('click', closeLogDetail);
+  initLogFilters();
 
   refreshList();
 });

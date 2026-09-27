@@ -9,7 +9,9 @@ const router = express.Router();
 router.get('/logs', (req, res) => {
   const limit = Number(req.query.limit) || 100;
   const offset = Number(req.query.offset) || 0;
-  res.json({ ok: true, data: logger.getLogs({ limit, offset }) });
+  const date = typeof req.query.date === 'string' ? req.query.date : '';
+  const pathLike = typeof req.query.path === 'string' ? req.query.path : '';
+  res.json({ ok: true, data: logger.getLogs({ limit, offset, date, pathLike }) });
 });
 
 router.delete('/logs', (req, res) => {

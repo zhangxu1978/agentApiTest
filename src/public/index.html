@@ -156,12 +156,21 @@
       <div class="sidebar-header">
         <span>访问日志</span>
         <div style="display: flex; gap: 4px;">
-          <button id="btn-refresh-logs" class="btn btn-mini">刷新</button>
+          <button id="btn-refresh-logs" class="btn btn-mini">🔍 查询</button>
           <button id="btn-clear-logs" class="btn btn-mini btn-danger">清空</button>
           <button id="btn-close-logs" class="btn-mini">✕</button>
         </div>
       </div>
       <div id="logs-container" style="flex: 1; overflow-y: auto; padding: 12px;">
+        <div class="logs-filter">
+          <label class="logs-filter-item">
+            <input type="date" id="log-filter-date" />
+          </label>
+          <label class="logs-filter-item">
+            <input type="text" id="log-filter-path" placeholder="模糊匹配，如 /api/chat" />
+          </label>
+          <span id="log-filter-summary" class="muted" style="margin-left: auto; font-size: 11px;"></span>
+        </div>
         <div id="logs-empty" class="empty" style="padding: 20px;">
           <p>暂无访问日志</p>
         </div>
@@ -171,7 +180,8 @@
               <tr>
                 <th style="width:25%">时间</th>
                 <th style="width:10%">方法</th>
-                <th style="width:65%">路径</th>
+                <th style="width:55%">路径</th>
+                <th style="width:10%">数量</th>
               </tr>
             </thead>
             <tbody id="logs-body"></tbody>
